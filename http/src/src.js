@@ -35,25 +35,39 @@ function loadPhotos() {
 	fetch("/getPhotos")
 	.then(res => res.json())
 	.then(data => {
-		if(data == null) return;
+		if(data == null) {
+				  piclist.innerHTML = "";
+				  return;
+		}
 		piclist.innerHTML = "";
-		console.log(data)
 		for(let i = 0; i < data.length; i++) {
-			let picData = data[i];
-			let html = "<img src=" + picData.path + " width=300>";
-			html += "<button onclick=deletePic('" + picData.path + "')>X</button><br>";
-			piclist.innerHTML += html;
+				let picData = data[i];
+				let html = "<img src=" + picData.path + " width=300>";
+				html += "<button onclick=deletePhoto('" + picData.path + "')>X</button><br>";
+				piclist.innerHTML += html;
 		}
 	});
 }
 
-function deletePic(path) {		
-	console.log(path)
+function deletePhoto(path) {		
+		  const options = {
+					 method: 'POST',
+					 headers: {'Content-Type': 'application/json'},
+					 body: JSON.stringify({"path": path}),
+		  }
+
+		  fetch("/deletePhoto", options)
+		  .then(res => res.text().then(() => {
+					 loadPhotos();		 
+		  }));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
 	loadPhotos();
 
 	const events = new EventSource('/events');
-	events.onmessage = () => loadPhotos();
+	events.onmessage = () => {
+		  console.log("Refreshed")
+		  loadPhotos();
+	} 
 });

@@ -68,8 +68,8 @@ func broadcast(msg string) {
 
 	for ch := range clients {
 		select {
-		case ch <- msg:
-		default: 
+			case ch <- msg:
+			default: 
 		}
 	}
 }
@@ -134,6 +134,9 @@ func sseHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func getPhotos(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("Content-Type", "application/json")
+	res.Header().Set("Cache-Control", "no-cache")
+
 	files, err := os.ReadDir("photos")
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -154,8 +157,18 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 		imgPaths = append(imgPaths, imgData)
 	}
 
-	res.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(res).Encode(imgPaths)
+}
+
+func deletePhoto(res http.ResponseWriter, req *http.Request) {
+	var imgPath ImgPath	
+
+	json.NewDecoder(req.Body).Decode(&imgPath)
+	err := os.Remove(imgPath.Path)
+
+	if logError(nil, err) { return }
+
+	broadcast(("refresh"))
 }
 
 func logError(msg *string, err error) bool{
@@ -169,6 +182,3 @@ func logError(msg *string, err error) bool{
 	return true
 }
 
-func deletePhoto(res http.ResponseWriter, req *http.Request) {
-
-}

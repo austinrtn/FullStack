@@ -1,0 +1,21 @@
+<script src="//unpkg.com/alpinejs" defer></script>
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<link ="stylesheet" href="app.css">
+	</head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<div x-data="{ open: false }">
+    <button @click="open = true">Expand</button>
+ 
+    <span x-show="open" x-data="{data: 'Hello World'}">
+	    <label x-html="data"></label>
+    </span>
+</div>
+</head>
+<body>
+  
+</body>
+</html> 

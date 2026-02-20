@@ -36,23 +36,23 @@ func main() {
 
 func helloWorld(res http.ResponseWriter, req *http.Request) {
 	// Create data instance to save JSON to
-	var data Data
-	var err error
-	// Decode json from req.BODY
-	err = json.NewDecoder(req.Body).Decode(&data)
-	// Check if JSON parsed
-	if err != nil {
-		http.Error(res, "Error parsing JSON", http.StatusBadRequest)
-		return
-	}
-	defer req.Body.Close()
+ 	var data Data
+        var err error
+        // Decode json from req.BODY
+        err = json.NewDecoder(req.Body).Decode(&data)
+        // Check if JSON parsed
+        if err != nil {
+                http.Error(res, "Error parsing JSON", http.StatusBadRequest)
+                return
+        }
+        defer req.Body.Close()
 	
 	// Write bytes to file with permisions
 	err = os.WriteFile(data.FileName, data.FileBytes, 0644)
-	if err != nil {
+	if err == nil {
+		log.Printf("File '%s' downloaded!", data.FileName)
+	} else {
 		http.Error(res, "Error writing file", http.StatusBadRequest)
 		return
-	} else {
-		log.Print("File Downloaded!")
 	}
 }

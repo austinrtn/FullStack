@@ -32,11 +32,11 @@ function handleClick() {
 
 function loadPhotos() {
 	const piclist = document.getElementById("piclist");
-	piclist.innerHTML = "";
 	fetch("/getPhotos")
 	.then(res => res.json())
 	.then(data => {
 		if(data == null) return;
+		piclist.innerHTML = "";
 		console.log(data)
 		for(let i = 0; i < data.length; i++) {
 			let picData = data[i];

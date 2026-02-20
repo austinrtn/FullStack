@@ -3,7 +3,7 @@ function handleClick() {
 	const file_name = file.name;
 	const file_ext = file_name.split(".").pop();
 
-	if (file_ext != "jpeg" && file_ext != "png") {
+	if (file_ext != "jpeg" && file_ext != "png" && file_ext != "jpg") {
 		alert("Invalid file type.  Must be .png or .jpeg");
 		return;
 	}
@@ -26,10 +26,12 @@ function handleClick() {
 		}).then(res => res.blob());
 	}
 	reader.readAsDataURL(file);
+	location.reload(true);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function loadPhotos() {
 	const piclist = document.getElementById("piclist");
+	piclist.innerHTML = "";
 	fetch("/getPhotos")
 	.then(res => res.json())
 	.then(data => {
@@ -39,4 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
 			piclist.innerHTML += "<img src="+ picData.path+"><br>";
 		}
 	});
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+	loadPhotos();
 });

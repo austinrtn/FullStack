@@ -124,7 +124,7 @@ func sseHandler(res http.ResponseWriter, req *http.Request) {
 	for {
 		select {
 		case msg := <-ch:
-			fmt.Fprintf(res, "data %s\n\n", msg)
+			fmt.Fprintf(res, "data: %s\n\n", msg)
 			flusher.Flush()
 		case <-req.Context().Done():
 			return

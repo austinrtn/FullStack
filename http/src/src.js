@@ -16,7 +16,7 @@ function handleClick() {
 	reader.onload = (e) => {
 		// File contents need to be base64 encoded for GO JSON parse
 		const base64 = e.target.result.split(',')[1];
-		fetch("/helloWorld", {
+		fetch("/savePhoto", {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json'},
 			body: JSON.stringify({

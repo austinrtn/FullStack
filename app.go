@@ -28,7 +28,7 @@ func main() {
 	http.Handle("/photos/", http.StripPrefix("/photos", photos))
 
 	//Handle function 
-	http.HandleFunc("/helloWorld", helloWorld)
+	http.HandleFunc("/savePhoto", savePhoto)
 
 	// Listen to port, handle if error
 	log.Printf("Listening to %s\n\n", PORT)
@@ -39,7 +39,7 @@ func main() {
 	}
 }
 
-func helloWorld(res http.ResponseWriter, req *http.Request) {
+func savePhoto(res http.ResponseWriter, req *http.Request) {
 	// Create data instance to save JSON to
  	var data Data
         var err error

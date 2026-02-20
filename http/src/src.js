@@ -23,10 +23,11 @@ function handleClick() {
 				"name": file_name,
 				"file": base64,
 			}),
-		}).then(res => res.blob());
+		}).then(res => res.blob().then(() => {
+			loadPhotos();
+		}));
 	}
 	reader.readAsDataURL(file);
-	location.reload(true);
 }
 
 function loadPhotos() {
@@ -35,6 +36,7 @@ function loadPhotos() {
 	fetch("/getPhotos")
 	.then(res => res.json())
 	.then(data => {
+		if(data == null) return;
 		console.log(data)
 		for(let i = 0; i < data.length; i++) {
 			let picData = data[i];

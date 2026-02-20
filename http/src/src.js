@@ -40,7 +40,7 @@ function loadPhotos() {
 		console.log(data)
 		for(let i = 0; i < data.length; i++) {
 			let picData = data[i];
-			piclist.innerHTML += "<img src="+ picData.path+"><br>";
+			piclist.innerHTML += "<img src="+ picData.path+" width=200><br>";
 		}
 	});
 }

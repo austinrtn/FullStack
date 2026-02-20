@@ -47,4 +47,7 @@ function loadPhotos() {
 
 document.addEventListener("DOMContentLoaded", () => {
 	loadPhotos();
+
+	const events = new EventSource('/events');
+	events.onmessage = () => loadPhotos();
 });

@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 
+	"fmt"
+	"sync"
 	//"strconv"
 	"os"
 )
@@ -20,6 +22,11 @@ type ImgData struct {
 type ImgPath struct {
 	Path string `json:"path"`
 }
+
+var (
+	clients = make(map[chan string] struct{})
+	clientsMu sync.Mutex
+)
 
 func main() {
 	var err error
@@ -43,6 +50,7 @@ func main() {
 	//Handle function 
 	http.HandleFunc("/savePhoto", savePhoto)
 	http.HandleFunc("/getPhotos", getPhotos)
+	http.HandleFunc("/events", sseHandler)
 
 	// Listen to port, handle if error
 	log.Printf("Listening to %s\n\n", PORT)
@@ -50,6 +58,18 @@ func main() {
 
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func broadcast(msg string) {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+
+	for ch := range clients {
+		select {
+		case ch <- msg:
+		default: 
+		}
 	}
 }
 
@@ -71,9 +91,44 @@ func savePhoto(res http.ResponseWriter, req *http.Request) {
 	err = os.WriteFile(fileName, imgData.FileBytes, 0644)
 	if err == nil {
 		log.Printf("File '%s' downloaded!", imgData.FileName)
+		broadcast("refresh")
 	} else {
 		http.Error(res, "Error writing file", http.StatusBadRequest)
 		return
+	}
+}
+
+func sseHandler(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("Content-Type", "text/event-stream")
+	res.Header().Set("Cache-Control", "no-cache")
+	res.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := res.(http.Flusher)
+
+	if !ok {
+		http.Error(res, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan string, 1)
+	clientsMu.Lock()
+	clients[ch] = struct{}{}
+	clientsMu.Unlock()
+
+	defer func() {
+		clientsMu.Lock()	
+		delete(clients, ch)
+		clientsMu.Unlock()
+	}()
+
+	for {
+		select {
+		case msg := <-ch:
+			fmt.Fprintf(res, "data %s\n\n", msg)
+			flusher.Flush()
+		case <-req.Context().Done():
+			return
+		}
 	}
 }
 

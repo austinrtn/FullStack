@@ -27,3 +27,16 @@ function handleClick() {
 	}
 	reader.readAsDataURL(file);
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+	const piclist = document.getElementById("piclist");
+	fetch("/getPhotos")
+	.then(res => res.json())
+	.then(data => {
+		console.log(data)
+		for(let i = 0; i < data.length; i++) {
+			let picData = data[i];
+			piclist.innerHTML += "<img src="+ picData.path+"><br>";
+		}
+	});
+});

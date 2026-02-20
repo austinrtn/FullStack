@@ -40,9 +40,15 @@ function loadPhotos() {
 		console.log(data)
 		for(let i = 0; i < data.length; i++) {
 			let picData = data[i];
-			piclist.innerHTML += "<img src="+ picData.path+" width=200><br>";
+			let html = "<img src=" + picData.path + " width=300>";
+			html += "<button onclick=deletePic('" + picData.path + "')>X</button><br>";
+			piclist.innerHTML += html;
 		}
 	});
+}
+
+function deletePic(path) {		
+	console.log(path)
 }
 
 document.addEventListener("DOMContentLoaded", () => {

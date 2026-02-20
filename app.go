@@ -50,6 +50,7 @@ func main() {
 	//Handle function 
 	http.HandleFunc("/savePhoto", savePhoto)
 	http.HandleFunc("/getPhotos", getPhotos)
+	http.HandleFunc("/deletePhoto", deletePhoto)
 	http.HandleFunc("/events", sseHandler)
 
 	// Listen to port, handle if error
@@ -166,4 +167,8 @@ func logError(msg *string, err error) bool{
 	}
 
 	return true
+}
+
+func deletePhoto(res http.ResponseWriter, req *http.Request) {
+
 }

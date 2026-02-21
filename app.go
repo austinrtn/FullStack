@@ -2,15 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-//	"io"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
-	"errors"
-//	"math/rand/v2"
 )
 
 const PORT = ":3000"
@@ -55,6 +54,7 @@ func main() {
 	http.HandleFunc("/savePhoto", savePhoto)
 	http.HandleFunc("/getPhotos", getPhotos)
 	http.HandleFunc("/deletePhoto", deletePhoto)
+	http.HandleFunc("/getRandomPhoto", getRandomPhoto)
 	http.HandleFunc("/events", sseHandler)
 
 	// Listen to port, handle if error
@@ -186,18 +186,28 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(res).Encode(imgPaths)
 }
 
-// func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
-// 	res.Header().Set("Content-Type", "application/json")
-// 	res.Header().Set("Cache-Control", "no-cache")
-//
-// 	files, err := os.ReadDir("photos")
-// 	if logError(nil, err) { return }
-// 	var randPhoto ImData
-//
-// 	for {
-// 		randFile := files[rand.IntN(len(files))] 
-// 	}
-// }
+func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("Content-Type", "application/json")
+	res.Header().Set("Cache-Control", "no-cache")
+
+	files, err := os.ReadDir("photos")
+	if logError(nil, err) { return }
+	var randPhoto ImgData
+
+	randFile := files[rand.IntN(len(files))] 
+	filePath := filepath.Join("photos", randFile.Name())
+
+	fileData, err := os.ReadFile(filePath)
+
+	if logError(nil, err) { return }
+
+	randPhoto = ImgData{
+		FileName: randFile.Name(),
+		FileBytes: fileData,
+	}
+
+	json.NewEncoder(res).Encode(randPhoto)
+}
 
 /// Remove photo from file server 
 func deletePhoto(res http.ResponseWriter, req *http.Request) {

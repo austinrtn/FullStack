@@ -63,9 +63,9 @@ function loadPhotos() {
 // Remove photo from file server
 function deletePhoto(path) {		
 		  const options = {
-					 method: 'POST',
-					 headers: {'Content-Type': 'application/json'},
-					 body: JSON.stringify({"path": path}),
+			method: 'POST',
+			headers: {'Content-Type': 'application/json'},
+			body: JSON.stringify({"path": path}),
 		  }
 
 		  fetch("/deletePhoto", options)

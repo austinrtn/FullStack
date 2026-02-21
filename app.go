@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"errors"
+//	"math/rand/v2"
 )
 
 const PORT = ":3000"
@@ -24,7 +26,7 @@ type ImgPath struct {
 	Path string `json:"path"`
 }
 
-// map structure to contain clients and their message chanels 
+/// map structure to contain clients and their message chanels 
 var (
 	clients = make(map[chan string] struct{})
 	clientsMu sync.Mutex
@@ -167,11 +169,11 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 	var imgPaths []ImgPath
 
 	// For each file, create file path, convert into ImgPath struct and append to imgPaths
-	for _, f := range files {
-		if f.IsDir() { continue	}
+	for _, file := range files {
+		if logError(nil, checkImgValid(file.Name(), file.IsDir())) { return }
 
 		// Create photo filepath 
-		filePath := filepath.Join("photos", f.Name())
+		filePath := filepath.Join("photos", file.Name())
 
 		imgData := ImgPath{
 			Path: filePath,
@@ -184,6 +186,18 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(res).Encode(imgPaths)
 }
 
+// func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
+// 	res.Header().Set("Content-Type", "application/json")
+// 	res.Header().Set("Cache-Control", "no-cache")
+//
+// 	files, err := os.ReadDir("photos")
+// 	if logError(nil, err) { return }
+// 	var randPhoto ImData
+//
+// 	for {
+// 		randFile := files[rand.IntN(len(files))] 
+// 	}
+// }
 
 /// Remove photo from file server 
 func deletePhoto(res http.ResponseWriter, req *http.Request) {
@@ -209,3 +223,12 @@ func logError(msg *string, err error) bool{
 	return true
 }
 
+var errInvalidFile = errors.New("invalid image type")
+
+func checkImgValid(fileName string, isDir bool) (error) {
+	if isDir { return errInvalidFile}
+	fileExt := filepath.Ext(fileName)
+
+	if fileExt != ".png" && fileExt != ".jpg" && fileExt != ".jpeg" { return errInvalidFile}
+	return nil
+}

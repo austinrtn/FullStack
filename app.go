@@ -1,15 +1,14 @@
 package main
 
 import (
-	"path/filepath"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
-
-	"fmt"
-	"sync"
-	//"strconv"
 	"os"
+	"path/filepath"
+	"sync"
 )
 
 const PORT = ":3000"
@@ -159,6 +158,7 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 
 	json.NewEncoder(res).Encode(imgPaths)
 }
+
 
 func deletePhoto(res http.ResponseWriter, req *http.Request) {
 	var imgPath ImgPath	

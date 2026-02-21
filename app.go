@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"mime"
 )
 
 const PORT = ":3000"
@@ -187,26 +188,21 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 }
 
 func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
-	res.Header().Set("Content-Type", "application/json")
-	res.Header().Set("Cache-Control", "no-cache")
-
 	files, err := os.ReadDir("photos")
 	if logError(nil, err) { return }
-	var randPhoto ImgData
 
 	randFile := files[rand.IntN(len(files))] 
 	filePath := filepath.Join("photos", randFile.Name())
+
+	fileExt := filepath.Ext(filePath)
+	res.Header().Set("Content-Type", mime.TypeByExtension(fileExt))
+	res.Header().Set("X-File-Name", randFile.Name())
 
 	fileData, err := os.ReadFile(filePath)
 
 	if logError(nil, err) { return }
 
-	randPhoto = ImgData{
-		FileName: randFile.Name(),
-		FileBytes: fileData,
-	}
-
-	json.NewEncoder(res).Encode(randPhoto)
+	res.Write(fileData)
 }
 
 /// Remove photo from file server 

@@ -24,3 +24,4 @@ trying to solve problems.
 - app.go
 - http/index.html
 - http/src/src.js
+- flow.drawio

@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+//	"io"
 	"log"
 	"net/http"
 	"os"
@@ -14,14 +14,17 @@ import (
 const PORT = ":3000"
 
 type ImgData struct {
+	/// Used to parse JSON client image data from client 
 	FileName string `json:"name"`
 	FileBytes []byte `json:"file"`
 }
 
 type ImgPath struct {
+	// Used to to send / recieve photo file paths JSON formated 
 	Path string `json:"path"`
 }
 
+// map structure to contain clients and their message chanels 
 var (
 	clients = make(map[chan string] struct{})
 	clientsMu sync.Mutex
@@ -46,7 +49,7 @@ func main() {
 	photos := http.FileServer(http.Dir("photos"))
 	http.Handle("/photos/", http.StripPrefix("/photos", photos))
 
-	//Handle function 
+	//Handle functions 
 	http.HandleFunc("/savePhoto", savePhoto)
 	http.HandleFunc("/getPhotos", getPhotos)
 	http.HandleFunc("/deletePhoto", deletePhoto)
@@ -61,10 +64,14 @@ func main() {
 	}
 }
 
+/// adds server message to client chanel that JS frontend listens for 
 func broadcast(msg string) {
+	// Lock from adding clients to client map to not modify
+	// map while itereating through it 
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
 
+	// For each client chanel, send message through it 
 	for ch := range clients {
 		select {
 			case ch <- msg:
@@ -73,6 +80,7 @@ func broadcast(msg string) {
 	}
 }
 
+/// Saves photo selected and send from JS client to File Server
 func savePhoto(res http.ResponseWriter, req *http.Request) {
 	// Create data instance to save JSON to
  	var imgData ImgData
@@ -91,6 +99,7 @@ func savePhoto(res http.ResponseWriter, req *http.Request) {
 	err = os.WriteFile(fileName, imgData.FileBytes, 0644)
 	if err == nil {
 		log.Printf("File '%s' downloaded!", imgData.FileName)
+		// Send message to client to refresh image list 
 		broadcast("refresh")
 	} else {
 		http.Error(res, "Error writing file", http.StatusBadRequest)
@@ -98,11 +107,16 @@ func savePhoto(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
+/// Function that is ran when client enters server.  Creates string chanel for client 
+/// and adds it to the client map.  Then listens for when messages are added to the client's chanel 
+/// from server and sends to client until disconnect 
 func sseHandler(res http.ResponseWriter, req *http.Request) {
+	// Set headers to ensure stream continues for life time of client-server connection
 	res.Header().Set("Content-Type", "text/event-stream")
 	res.Header().Set("Cache-Control", "no-cache")
 	res.Header().Set("Connection", "keep-alive")
 
+	// For flushing messages to client 
 	flusher, ok := res.(http.Flusher)
 
 	if !ok {
@@ -110,6 +124,8 @@ func sseHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Add client chanel to client map.  Lock map to ensure 'single file' adding of clients.
+	// Multiple clients being connected at the same time without locking map can cause errors.
 	ch := make(chan string, 1)
 	clientsMu.Lock()
 	clients[ch] = struct{}{}
@@ -121,32 +137,40 @@ func sseHandler(res http.ResponseWriter, req *http.Request) {
 		clientsMu.Unlock()
 	}()
 
+	// Listen for messages to be added to the client's chanel, then flush it to the client 
 	for {
 		select {
+		// if client has message
 		case msg := <-ch:
 			fmt.Fprintf(res, "data: %s\n\n", msg)
 			flusher.Flush()
+		// if client discconects 
 		case <-req.Context().Done():
 			return
 		}
 	}
 }
 
+/// Sends list of photofile paths to client to load into HTML 
 func getPhotos(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	res.Header().Set("Cache-Control", "no-cache")
 
+	// Get files from photos dir 
 	files, err := os.ReadDir("photos")
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 		return
 	}
 
+	// Store imagePath structs to be converted into JSON 
 	var imgPaths []ImgPath
 
+	// For each file, create file path, convert into ImgPath struct and append to imgPaths
 	for _, f := range files {
 		if f.IsDir() { continue	}
 
+		// Create photo filepath 
 		filePath := filepath.Join("photos", f.Name())
 
 		imgData := ImgPath{
@@ -156,13 +180,16 @@ func getPhotos(res http.ResponseWriter, req *http.Request) {
 		imgPaths = append(imgPaths, imgData)
 	}
 
+	// Send imgPaths to http response writer as JSON 
 	json.NewEncoder(res).Encode(imgPaths)
 }
 
 
+/// Remove photo from file server 
 func deletePhoto(res http.ResponseWriter, req *http.Request) {
 	var imgPath ImgPath	
 
+	// Get path from JSON sent by client 
 	json.NewDecoder(req.Body).Decode(&imgPath)
 	err := os.Remove(imgPath.Path)
 

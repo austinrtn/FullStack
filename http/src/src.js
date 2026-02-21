@@ -1,14 +1,19 @@
-function handleClick() {
+/// Sends selected picture to backend
+function submitPhoto() {
+	// Check for / get user selected file 
 	const file = document.getElementById("file_btn").files[0];
+	if(file == null || file == undefined) return;
+
 	const file_name = file.name;
 	const file_ext = file_name.split(".").pop();
 
+	// Make sure correct file type (image)
 	if (file_ext != "jpeg" && file_ext != "png" && file_ext != "jpg") {
 		alert("Invalid file type.  Must be .png or .jpeg");
 		return;
 	}
 
-	// Create file reader 
+	// Create file reader to extract bytes from selected image / file
 	const reader = new FileReader();
 	// e is the event fired by the FileReader
 	// e.target is the file reader itself
@@ -30,11 +35,15 @@ function handleClick() {
 	reader.readAsDataURL(file);
 }
 
+/// Fills HTML with photos from server 
 function loadPhotos() {
 	const piclist = document.getElementById("piclist");
+
+	// Get file paths for photos and load them into HTML 
 	fetch("/getPhotos")
 	.then(res => res.json())
 	.then(data => {
+		// No photos in server, or error retriving photos;
 		if(data == null) {
 				  piclist.innerHTML = "";
 				  return;
@@ -42,6 +51,8 @@ function loadPhotos() {
 		piclist.innerHTML = "";
 		for(let i = 0; i < data.length; i++) {
 				let picData = data[i];
+				
+				// For each image file, create img HTML element with button to delete photo
 				let html = "<img src=" + picData.path + " width=300>";
 				html += "<button onclick=deletePhoto('" + picData.path + "')>X</button><br>";
 				piclist.innerHTML += html;
@@ -49,6 +60,7 @@ function loadPhotos() {
 	});
 }
 
+// Remove photo from file server
 function deletePhoto(path) {		
 		  const options = {
 					 method: 'POST',
@@ -62,12 +74,12 @@ function deletePhoto(path) {
 		  }));
 }
 
+// Listen to messages from the server
 document.addEventListener("DOMContentLoaded", () => {
 	loadPhotos();
 
 	const events = new EventSource('/events');
 	events.onmessage = () => {
-		  console.log("Refreshed")
 		  loadPhotos();
 	} 
 });

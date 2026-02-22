@@ -3,3 +3,4 @@
 ./display/.zig-cache/
 display/zig-out/
 display/.zig-cache/
+./display/photos/

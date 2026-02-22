@@ -9,20 +9,20 @@ pub const HttpClient = struct {
 
     server_url: []const u8,
     allocator: std.mem.Allocator,
-
-    client: std.http.Client = undefined,
-    root_dir: std.fs.Dir = undefined,
-
+    photo_dir: *std.fs.Dir,
     stdout: *std.io.Writer,
 
-    pub fn init(allocator: std.mem.Allocator, root_dir_path: []const u8, server_url: []const u8, stdout: *std.io.Writer) !Self {
+    client: std.http.Client = undefined,
+
+    pub fn init(allocator: std.mem.Allocator, photo_dir: *std.fs.Dir, server_url: []const u8, stdout: *std.io.Writer) !Self {
         var self: Self = .{
             .allocator = allocator,
             .server_url = server_url,
             .stdout = stdout,
+            .photo_dir = photo_dir,
         };
 
-        self.root_dir = try std.fs.cwd().openDir(root_dir_path, .{});
+
         self.client = std.http.Client{.allocator = allocator};
 
         return self;
@@ -30,7 +30,6 @@ pub const HttpClient = struct {
 
     pub fn deinit(self: *Self) void {
         self.client.deinit();
-        self.root_dir.close();
     }
 
     pub fn log(self: *Self, comptime fmt: []const u8, args: anytype) !void{
@@ -92,7 +91,7 @@ pub const HttpClient = struct {
         defer self.allocator.free(file_name);
 
         try self.log("Saving File: {s}...\n", .{file_name}); 
-        var img_file = try self.root_dir.createFile(file_name, .{});
+        var img_file = try self.photo_dir.createFile(file_name, .{});
         defer img_file.close();
 
         var img_buf: [8192]u8 = undefined;

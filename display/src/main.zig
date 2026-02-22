@@ -54,8 +54,16 @@ pub fn main() !void {
     const shader = try raylib.loadShader(null, shader_path);
     const time_loc = raylib.getShaderLocation(shader, "time");
 
-    try client.downloadRandomPhoto();
-    try photo_handler.loadNextTexture();
+    var photo_available = true;
+    client.downloadRandomPhoto() catch |err| switch(err){
+        error.NoPhotosAvailable => {
+            photo_handler.texture = null;
+            photo_available = false;
+        },
+        else => { return err; },
+    };
+
+    if(photo_available) try photo_handler.loadNextTexture();
 
     var timer = try std.time.Timer.start();
     while(!raylib.windowShouldClose()) {
@@ -71,12 +79,7 @@ pub fn main() !void {
         if(photo_handler.texture) |texture| {
             const texture_dims = try photo_handler.getTextureSize();
             raylib.beginShaderMode(shader);
-  std.debug.print("screen: {}x{} pos: {d},{d}\n", .{
-      raylib.getScreenWidth(),
-      raylib.getScreenHeight(),
-      texture_dims.pos.x,
-      texture_dims.pos.y,
-  });
+
             raylib.drawTexturePro(
                 texture, 
                 .{ //Source Rectangle to read texture
@@ -98,7 +101,7 @@ pub fn main() !void {
             raylib.endShaderMode();
         }
         else {
-            const screen_width = raylib.getScreenWidth();
+            const screen_width = raylib.getRenderWidth();
             //const screen_height = raylib.getScreenHeight();
             const text = "No pictures loaded";
             const text_width = raylib.measureText(text, 32);
@@ -113,7 +116,13 @@ pub fn main() !void {
 fn runTimer(timer: *std.time.Timer, client: *HttpClient, photo_handler: *PhotoHandler) !void {
     const elapsed = timer.read();
     if(elapsed >= (3 * std.time.ns_per_s)) {
-        try client.downloadRandomPhoto();
+        client.downloadRandomPhoto() catch |err| switch(err){
+            error.NoPhotosAvailable => {
+                photo_handler.texture = null;
+                return; 
+            }, 
+            else => {return err;},
+        };
         try photo_handler.loadNextTexture();
         timer.reset();
     }

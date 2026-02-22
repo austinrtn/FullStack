@@ -14,6 +14,7 @@ import (
 )
 
 const PORT = ":3000"
+var lastImgName string = ""
 
 type ImgData struct {
 	/// Used to parse JSON client image data from client 
@@ -191,8 +192,17 @@ func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
 	files, err := os.ReadDir("photos")
 	if logError(nil, err) { return }
 
-	randFile := files[rand.IntN(len(files))] 
-	filePath := filepath.Join("photos", randFile.Name())
+	var randFile os.DirEntry
+	var filePath string 
+	for {
+		randFile = files[rand.IntN(len(files))] 
+		filePath = filepath.Join("photos", randFile.Name())
+
+		if len(files) > 1 && lastImgName != randFile.Name() { 
+			lastImgName = randFile.Name()
+			break 
+		} else { break } 
+	}
 
 	fileExt := filepath.Ext(filePath)
 	res.Header().Set("Content-Type", mime.TypeByExtension(fileExt))

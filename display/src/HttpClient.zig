@@ -62,7 +62,7 @@ pub const HttpClient = struct {
 
     /// Request a random photo from the server and download locally
     pub fn downloadRandomPhoto(self: *Self) !void {
-        try self.log("Resquesting Random Photo From Server...\n", .{});
+        try self.log("Requesting Random Photo From Server...\n", .{});
 
         try self.deleteRandomPhoto();
         const server_path = try std.fs.path.join(
@@ -80,11 +80,14 @@ pub const HttpClient = struct {
         var req = try self.client.request(.GET, uri, .{});
         defer req.deinit();
 
-        try req.sendBodiless(); // Request random photo from server
+        // Request random photo from server
+         req.sendBodiless() catch return error.NoPhotosAvailable; 
 
         // Recieve headers and store in buffer
         var redir_buf: [4096] u8 = undefined; 
-        var res = try req.receiveHead(&redir_buf); 
+        var res = req.receiveHead(&redir_buf) catch return error.NoPhotosAvailable; 
+
+        if(res.head.status != .ok) return error.NoPhotosAvailable;
 
         try self.log("File Headers Downloaded! Parsing...\n", .{});
 

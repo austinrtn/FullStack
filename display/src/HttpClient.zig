@@ -1,29 +1,38 @@
 const std = @import("std");
 
+/// Request URL extensions
 const ServerPaths = struct {
     const downloadRandomPhoto = "/getRandomPhoto";
 };
 
+/// Responsible for connecting to server / downloading files
 pub const HttpClient = struct {
     const Self = @This();
+    const Config = struct {
+        allocator: std.mem.Allocator,
+        server_url: []const u8,
+        photo_name: []const u8,
+        photo_dir: *std.fs.Dir,
+        stdout: *std.io.Writer
+    };
 
-    server_url: []const u8,
     allocator: std.mem.Allocator,
-    photo_dir: *std.fs.Dir,
-    stdout: *std.io.Writer,
+    server_url: []const u8,
+    photo_name: []const u8,
+    photo_dir: *std.fs.Dir, // Directory where photos are stored 
+    stdout: *std.io.Writer, // Writes output to user
+    client: std.http.Client, //std lib tool for requests 
 
-    client: std.http.Client = undefined,
-
-    pub fn init(allocator: std.mem.Allocator, photo_dir: *std.fs.Dir, server_url: []const u8, stdout: *std.io.Writer) !Self {
-        var self: Self = .{
-            .allocator = allocator,
-            .server_url = server_url,
-            .stdout = stdout,
-            .photo_dir = photo_dir,
+    /// Create new instanceo of HTTPClient 
+    pub fn init(config: Config) Self {
+        const self: Self = .{
+            .allocator = config.allocator,
+            .server_url = config.server_url,
+            .photo_name = config.photo_name,
+            .photo_dir = config.photo_dir,
+            .stdout = config.stdout,
+            .client = std.http.Client{.allocator = config.allocator}
         };
-
-
-        self.client = std.http.Client{.allocator = allocator};
 
         return self;
     }
@@ -32,17 +41,30 @@ pub const HttpClient = struct {
         self.client.deinit();
     }
 
-    pub fn log(self: *Self, comptime fmt: []const u8, args: anytype) !void{
+    /// Log message to console 
+    fn log(self: *Self, comptime fmt: []const u8, args: anytype) !void{
         try self.stdout.print(fmt, args);
         try self.stdout.flush();
     }
 
+    fn deleteRandomPhoto(self: *Self) !void {
+        const exts = [_][]const u8{ ".jpg", ".jpeg", ".png", };
+
+        for(exts) |ext| {
+            var buf: [1024]u8 = undefined;
+            const path = try  std.fmt.bufPrint(&buf, "{s}{s}", .{self.photo_name, ext});
+            self.photo_dir.deleteFile(path) catch |err| switch(err) {
+                error.FileNotFound => {}, 
+                else => { return err; },
+            };
+        }
+    }
+
+    /// Request a random photo from the server and download locally
     pub fn downloadRandomPhoto(self: *Self) !void {
         try self.log("Resquesting Random Photo From Server...\n", .{});
 
-        var res_writer = std.io.Writer.Allocating.init(self.allocator);
-        defer res_writer.deinit();
-
+        try self.deleteRandomPhoto();
         const server_path = try std.fs.path.join(
             self.allocator, 
             &.{
@@ -54,18 +76,23 @@ pub const HttpClient = struct {
 
         const uri = try std.Uri.parse(server_path);
 
+        // Init server request
         var req = try self.client.request(.GET, uri, .{});
         defer req.deinit();
-        try req.sendBodiless();
 
+        try req.sendBodiless(); // Request random photo from server
+
+        // Recieve headers and store in buffer
         var redir_buf: [4096] u8 = undefined; 
-        var res = try req.receiveHead(&redir_buf);
+        var res = try req.receiveHead(&redir_buf); 
 
-        try self.log("File Contents Downloaded! Parsing Headers...\n", .{});
+        try self.log("File Headers Downloaded! Parsing...\n", .{});
 
+        // Create null placeholder for file extension 
         var file_ext: ?[]const u8 = null;
         var header_iter = res.head.iterateHeaders();
 
+        // Parse headers from server requenst, specifically 'Content-Type'
         // Avaialbe headers: Content-Type, X-File-Name, Date, Trasnfer-Encoding
         // Content-Type values: 'image/jpeg', 'image/png'
         while(header_iter.next()) |header| {
@@ -80,18 +107,21 @@ pub const HttpClient = struct {
        
         if(file_ext == null) return error.NoContentTypeHeaderFound; 
 
+        // Read the body / contents /file bytes of
+        //  the data being send from server 
         const body = try res.reader(&.{}).allocRemaining(self.allocator, .unlimited);
         defer self.allocator.free(body);
         
-        const file_name = try std.fmt.allocPrint(
+        const file_path = try std.fmt.allocPrint(
             self.allocator, 
             "{s}{s}", 
             .{"RandomPhoto", file_ext.?}
         );
-        defer self.allocator.free(file_name);
+        defer self.allocator.free(file_path);
 
-        try self.log("Saving File: {s}...\n", .{file_name}); 
-        var img_file = try self.photo_dir.createFile(file_name, .{});
+        // Create image file 
+        try self.log("Saving File: {s}...\n", .{file_path}); 
+        var img_file = try self.photo_dir.createFile(file_path, .{});
         defer img_file.close();
 
         var img_buf: [8192]u8 = undefined;

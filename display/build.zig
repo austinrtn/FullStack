@@ -1,5 +1,7 @@
 const std = @import("std");
 const SERVER = "http://localhost:3000";
+const PHOTO_NAME = "RandomPhoto";
+const PHOTO_DIR = "photos";
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -26,6 +28,8 @@ pub fn build(b: *std.Build) void {
 
     run_cmd.addArg(b.pathFromRoot("."));
     run_cmd.addArg(SERVER);
+    run_cmd.addArg(PHOTO_NAME);
+    run_cmd.addArg(PHOTO_DIR);
 
     if(b.args) |args| {
         run_cmd.addArgs(args);

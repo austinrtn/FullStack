@@ -1,13 +1,11 @@
 const std = @import("std");
 const raylib = @import("raylib");
 const HttpClient = @import("HttpClient.zig").HttpClient;
-
-var timer: std.time.Timer = undefined;
-var client: HttpClient = undefined;
-var photo_dir: std.fs.Dir = undefined;
-var texture: ?raylib.Texture2D = null;
+const PhotoHandler = @import("PhotoHandler.zig").PhotoHandler;
 
 pub fn main() !void {
+    const FULL_SCREEN = true;
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
@@ -18,36 +16,93 @@ pub fn main() !void {
 
     const root_path = args.next() orelse return error.NoRootPath;
     const server_url = args.next() orelse return error.NoServerURL;
+    const photo_name = args.next() orelse return error.NoPhotoName;
+    const photo_dir_name = args.next() orelse return error.NoPhotoDir;
 
-    const photo_path = try std.fmt.allocPrint(allocator, "{s}/photos", .{root_path});
+    const photo_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{root_path, photo_dir_name});
     defer allocator.free(photo_path);
-    photo_dir = try std.fs.cwd().openDir(photo_path, .{.iterate = true});
+
+    var photo_dir = try std.fs.cwd().openDir(photo_path, .{.iterate = true});
+    defer photo_dir.close();
 
     var stdout_buf: [4096]u8 = undefined;
     var stdout = std.fs.File.stdout().writer(&stdout_buf);
     const writer = &stdout.interface;
 
-    client = try HttpClient.init(allocator, &photo_dir, server_url, writer);
+    var client = HttpClient.init(.{
+        .allocator = allocator,
+        .server_url = server_url,
+        .photo_name = photo_name,
+        .photo_dir = &photo_dir,
+        .stdout = writer,
+    });
     defer client.deinit();
 
-    timer = try std.time.Timer.start();
-
     raylib.initWindow(800, 800, "Window");
-    defer raylib.closeWindow();
+    raylib.setTargetFPS(60);
+    if(FULL_SCREEN) raylib.toggleFullscreen();
+    defer{
+        if(raylib.isWindowFullscreen()) raylib.toggleFullscreen();
+        raylib.closeWindow(); 
+    }    
+
+    var photo_handler = PhotoHandler.init(.{.allocator = allocator, .photo_dir = &photo_dir, .photo_dir_path = photo_path});
+    defer photo_handler.deinit();
+
+    var buf: [1024]u8 = undefined;
+    const shader_path = try std.fmt.bufPrintZ(&buf, "{s}/src/shaders/{s}", .{root_path, "Wave.frag"});
+    const shader = try raylib.loadShader(null, shader_path);
+    const time_loc = raylib.getShaderLocation(shader, "time");
+
     try client.downloadRandomPhoto();
-    while(true) {
+    try photo_handler.loadNextTexture();
+
+    var timer = try std.time.Timer.start();
+    while(!raylib.windowShouldClose()) {
+        const time: f32 = @floatCast(raylib.getTime());
+        raylib.setShaderValue(shader, time_loc, &time, .float);
+        try runTimer(&timer, &client, &photo_handler);
+        
         raylib.beginDrawing(); 
         defer raylib.endDrawing();
 
         raylib.clearBackground(.ray_white);
 
-        if(texture) |t| {
-            raylib.drawTexture(t, 0, 0, .white);
+        if(photo_handler.texture) |texture| {
+            const texture_dims = try photo_handler.getTextureSize();
+            raylib.beginShaderMode(shader);
+  std.debug.print("screen: {}x{} pos: {d},{d}\n", .{
+      raylib.getScreenWidth(),
+      raylib.getScreenHeight(),
+      texture_dims.pos.x,
+      texture_dims.pos.y,
+  });
+            raylib.drawTexturePro(
+                texture, 
+                .{ //Source Rectangle to read texture
+                    .x = 0,
+                    .y = 0,
+                    .width = @floatFromInt(texture.width),
+                    .height = @floatFromInt(texture.height),
+                }, 
+                .{ //Dest Rectangle to draw onto screen
+                    .x = texture_dims.pos.x,
+                    .y = texture_dims.pos.y,
+                    .width = texture_dims.width,
+                    .height = texture_dims.height,
+                }, 
+                .{.x = 0, .y = 0}, //origin point
+                0, //rotation
+                .white, //tint
+            );
+            raylib.endShaderMode();
         }
         else {
+            const screen_width = raylib.getScreenWidth();
+            //const screen_height = raylib.getScreenHeight();
             const text = "No pictures loaded";
             const text_width = raylib.measureText(text, 32);
-            const start_x = @divTrunc(raylib.getScreenWidth(), 2) 
+            const start_x = @divTrunc(screen_width, 2) 
                 - @divTrunc(text_width, 2);
 
             raylib.drawText(text, start_x, 400, 32, .black);
@@ -55,14 +110,12 @@ pub fn main() !void {
     }
 }
 
-fn downloadPhoto() !void {
+fn runTimer(timer: *std.time.Timer, client: *HttpClient, photo_handler: *PhotoHandler) !void {
     const elapsed = timer.read();
     if(elapsed >= (3 * std.time.ns_per_s)) {
         try client.downloadRandomPhoto();
+        try photo_handler.loadNextTexture();
         timer.reset();
     }
 }
 
-fn getTexture() !?[]const u8{
-    return try photo_dir.iterate().next();
-}

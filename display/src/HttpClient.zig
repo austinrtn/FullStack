@@ -37,6 +37,11 @@ pub const HttpClient = struct {
         return self;
     }
 
+    pub fn resetClient(self: *Self) void {
+        self.client.deinit();
+        self.client = std.http.Client{.allocator = self.allocator};
+    }
+
     pub fn deinit(self: *Self) void {
         self.client.deinit();
     }

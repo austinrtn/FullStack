@@ -2,9 +2,9 @@ const std = @import("std");
 const raylib = @import("raylib");
 const HttpClient = @import("HttpClient.zig").HttpClient;
 const PhotoHandler = @import("PhotoHandler.zig").PhotoHandler;
+const FULL_SCREEN = true;
 
 pub fn main() !void {
-    const FULL_SCREEN = true;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -119,6 +119,7 @@ fn runTimer(timer: *std.time.Timer, client: *HttpClient, photo_handler: *PhotoHa
         client.downloadRandomPhoto() catch |err| switch(err){
             error.NoPhotosAvailable => {
                 photo_handler.texture = null;
+                client.resetClient();
                 return; 
             }, 
             else => {return err;},

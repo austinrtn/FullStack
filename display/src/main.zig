@@ -2,10 +2,12 @@ const std = @import("std");
 const raylib = @import("raylib");
 const HttpClient = @import("HttpClient.zig").HttpClient;
 const PhotoHandler = @import("PhotoHandler.zig").PhotoHandler;
-const FULL_SCREEN = true;
+const FULL_SCREEN = false;
+
+var photo_available = true;
+var connected = true;
 
 pub fn main() !void {
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
@@ -54,11 +56,15 @@ pub fn main() !void {
     const shader = try raylib.loadShader(null, shader_path);
     const time_loc = raylib.getShaderLocation(shader, "time");
 
-    var photo_available = true;
+    photo_available = true;
+    connected = true;
     client.downloadRandomPhoto() catch |err| switch(err){
         error.NoPhotosAvailable => {
             photo_handler.texture = null;
             photo_available = false;
+        },
+        error.ConnectionRefused => {
+            connected = false;
         },
         else => { return err; },
     };
@@ -67,14 +73,27 @@ pub fn main() !void {
 
     var timer = try std.time.Timer.start();
     while(!raylib.windowShouldClose()) {
-        const time: f32 = @floatCast(raylib.getTime());
-        raylib.setShaderValue(shader, time_loc, &time, .float);
         try runTimer(&timer, &client, &photo_handler);
-        
+
         raylib.beginDrawing(); 
         defer raylib.endDrawing();
 
         raylib.clearBackground(.ray_white);
+
+        if(!connected) {
+            const screen_width = raylib.getRenderWidth();
+            //const screen_height = raylib.getScreenHeight();
+            const text = "Not Connected To Server";
+            const text_width = raylib.measureText(text, 32);
+            const start_x = @divTrunc(screen_width, 2) 
+                - @divTrunc(text_width, 2);
+
+            raylib.drawText(text, start_x, 400, 32, .black);
+            continue;
+        }
+
+        const time: f32 = @floatCast(raylib.getTime());
+        raylib.setShaderValue(shader, time_loc, &time, .float);
 
         if(photo_handler.texture) |texture| {
             const texture_dims = try photo_handler.getTextureSize();
@@ -115,17 +134,32 @@ pub fn main() !void {
 
 fn runTimer(timer: *std.time.Timer, client: *HttpClient, photo_handler: *PhotoHandler) !void {
     const elapsed = timer.read();
+
     if(elapsed >= (3 * std.time.ns_per_s)) {
+        timer.reset();
+        var caught_err = false; 
+
+        connected = true;
+        photo_available = true;
+
         client.downloadRandomPhoto() catch |err| switch(err){
+            error.ConnectionRefused => {
+                connected = false;
+                caught_err = true;
+            },
             error.NoPhotosAvailable => {
                 photo_handler.texture = null;
                 client.resetClient();
-                return; 
+                photo_available = false;
+
+                caught_err = true;
             }, 
             else => {return err;},
         };
+
+        if(caught_err) return;
+
         try photo_handler.loadNextTexture();
-        timer.reset();
     }
 }
 

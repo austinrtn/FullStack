@@ -1,5 +1,11 @@
 const std = @import("std");
 
+const ClientState = enum {
+    NOT_CONNECTED,
+    NO_PHOTOS_AVAILABLE,
+    SUCCESS,
+};
+
 /// Request URL extensions
 const ServerPaths = struct {
     const downloadRandomPhoto = "/getRandomPhoto";
@@ -22,6 +28,7 @@ pub const HttpClient = struct {
     photo_dir: *std.fs.Dir, // Directory where photos are stored 
     stdout: *std.io.Writer, // Writes output to user
     client: std.http.Client, //std lib tool for requests 
+    state: ClientState = .NOT_CONNECTED,
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
@@ -35,6 +42,10 @@ pub const HttpClient = struct {
         };
 
         return self;
+    }
+
+    pub fn establishConnection(self: *Self) !void {
+        // Here will create connection to listen to messages from server 
     }
 
     pub fn resetClient(self: *Self) void {
@@ -67,7 +78,6 @@ pub const HttpClient = struct {
 
     /// Request a random photo from the server and download locally
     pub fn downloadRandomPhoto(self: *Self) !void {
-        try self.log("Requesting Random Photo From Server...\n", .{});
 
         try self.deleteRandomPhoto();
         const server_path = try std.fs.path.join(
@@ -86,7 +96,8 @@ pub const HttpClient = struct {
         defer req.deinit();
 
         // Request random photo from server
-         req.sendBodiless() catch return error.NoPhotosAvailable; 
+        req.sendBodiless() catch return error.NoPhotosAvailable; 
+        try self.log("Requested Random Photo From Server...\n", .{});
 
         // Recieve headers and store in buffer
         var redir_buf: [4096] u8 = undefined; 

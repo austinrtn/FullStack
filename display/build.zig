@@ -35,8 +35,35 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
+    const backend_exe = b.addExecutable(.{
+        .name = "backend",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/backend.zig"),
+            .target = target,
+            .optimize = optimize, 
+            .imports = &.{}
+        }),
+
+    });
+
+    b.installArtifact(backend_exe);
+
+    const backend_step = b.step("backend", "Run app");
+    const backend_cmd = b.addRunArtifact(backend_exe);
+
+    backend_step.dependOn(&backend_cmd.step);
+    backend_cmd.step.dependOn(b.getInstallStep());
+
+    backend_cmd.addArg(b.pathFromRoot("."));
+    backend_cmd.addArg(SERVER);
+    backend_cmd.addArg(PHOTO_NAME);
+    backend_cmd.addArg(PHOTO_DIR);
+
+    if(b.args) |args| {
+        backend_cmd.addArgs(args);
+    }
+
     //RAYLIB
-    
     const raylib_dep = b.dependency("raylib_zig", .{
         .target = target,
         .optimize = optimize,
@@ -49,5 +76,4 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkLibrary(raylib_artifact);
     exe.root_module.addImport("raylib", raylib);
     exe.root_module.addImport("raygui", raygui);
-
 }

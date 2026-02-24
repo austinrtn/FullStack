@@ -34,4 +34,5 @@ pub fn main() !void {
     });
 
     defer client.deinit();
+    try client.establishConnection();
 }

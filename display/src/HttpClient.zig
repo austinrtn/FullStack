@@ -8,6 +8,7 @@ const ClientState = enum {
 
 /// Request URL extensions
 const ServerPaths = struct {
+    const establishConnection = "/events";
     const downloadRandomPhoto = "/getRandomPhoto";
 };
 
@@ -44,9 +45,6 @@ pub const HttpClient = struct {
         return self;
     }
 
-    pub fn establishConnection(self: *Self) !void {
-        // Here will create connection to listen to messages from server 
-    }
 
     pub fn resetClient(self: *Self) void {
         self.client.deinit();
@@ -73,6 +71,37 @@ pub const HttpClient = struct {
                 error.FileNotFound => {}, 
                 else => { return err; },
             };
+        }
+    }
+
+    pub fn establishConnection(self: *Self) !void {
+        const server_path = try std.fs.path.join(
+            self.allocator, 
+            &.{
+                self.server_url, 
+                ServerPaths.establishConnection,
+            }
+        );
+        defer self.allocator.free(server_path);
+        
+        const uri = try std.Uri.parse(server_path);
+        var req = try self.client.request(.GET, uri, .{});
+        defer req.deinit();
+
+        try req.sendBodiless();
+
+        var redir_buf: [4096]u8 = undefined;
+        var res = req.receiveHead(&redir_buf) catch return error.NoConnectionEstablished;
+        if(res.head.status != .ok) return error.NoConnectionEstablished;
+
+        var res_buf: [4096]u8 = undefined;
+        var res_reader = res.reader(&res_buf);
+        while (res_reader.takeDelimiterExclusive('\n')) |line| {
+            try self.log("{s}\n", .{line});
+            break;
+        } else |err| switch(err) {
+            error.EndOfStream => {}, 
+            else => { return err; }
         }
     }
 

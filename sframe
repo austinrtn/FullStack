@@ -1,0 +1,2 @@
+  sudo objcopy --remove-section .sframe /usr/lib/libc_nonshared.a
+

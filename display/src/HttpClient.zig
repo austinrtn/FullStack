@@ -105,14 +105,10 @@ pub const HttpClient = struct {
         var res_reader: ?*std.io.Reader = null;
         defer if(request) |*req| req.deinit();
        
-        const tool = struct {
-            fn print(str: []const u8) void {
-                std.debug.print("Made it to phase: {s}\n", .{str}); 
-            } 
-        };
         while(true) {
+            try self.printR("Status: {}", .{self.connected});
+
             if(!self.connected or request == null or response == null) {
-                tool.print("Inner loop");       
                 if(self.client.request(.GET, uri, .{})) 
                     |req| { request = req; }
                 else |err| switch(err) {
@@ -123,11 +119,11 @@ pub const HttpClient = struct {
                     else => { return err; }
                 }
 
-                tool.print("Req success"); 
                 if(request) |*req| {
-                    tool.print("Inner req");
-                    if(req.receiveHead(&redir_buf)) 
-                        |res| { response = res; } 
+                    req.sendBodiless() catch continue;
+                    if(req.receiveHead(&redir_buf)) |res| { 
+                        response = res; 
+                    } 
                     else |err| switch (err) {
                         error.ConnectionRefused => {
                             self.connected = false;
@@ -135,12 +131,7 @@ pub const HttpClient = struct {
                         else => { return err; }
                     }
 
-
-                    try req.sendBodiless();
-                    tool.print("After Response");
-
                     if(response) |*res| {
-                        tool.print("Has Response");
                         if(res.head.status == .ok) self.connected = true else continue;
                         res_reader = res.reader(&res_buf);
                     } else continue; 
@@ -148,20 +139,17 @@ pub const HttpClient = struct {
             }
 
             if(!self.connected) continue;
-            tool.print("COnnected");
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
+                try self.printR("Status: {}", .{self.connected});
+
                 if(line.len == 0) continue;
                 const trimmed = std.mem.trimRight(u8, line, "\n");
                 const stripped = std.mem.trimLeft(u8, trimmed, "data::");
 
-                try self.stdout.print("Status: {}\r", .{self.connected});
                 inline for(std.meta.fields(@TypeOf(messages))) |field| {
                     const msg = @field(messages, field.name);
                     if(std.mem.eql(u8, stripped, msg.str)) { msg.func(self); }
                 }
-
-                try self.stdout.print("Status: {}\r", .{self.connected});
-                try self.stdout.flush();
 
             } else |err| switch(err) {
                 error.EndOfStream, error.ReadFailed => { self.connected = false; }, 
@@ -245,5 +233,12 @@ pub const HttpClient = struct {
         try fw.flush();
 
         try self.log("File saved!\n\n", .{});
+    }
+
+    fn printR(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+        const str = fmt ++ "\r";
+        try self.stdout.print(str, args);
+        try self.stdout.print("\x1B[2K\rStatus: {}", .{self.connected});
+        try self.stdout.flush();
     }
 };

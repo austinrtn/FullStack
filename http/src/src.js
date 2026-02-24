@@ -90,7 +90,7 @@ function getRandomPhoto() {
 document.addEventListener("DOMContentLoaded", () => {
 	loadPhotos();
 
-	const events = new EventSource('/events');
+	const events = new EventSource('/events?category=ui');
 	events.onmessage = () => {
 		loadPhotos();
 	}

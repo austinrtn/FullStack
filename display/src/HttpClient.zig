@@ -6,10 +6,26 @@ const ClientState = enum {
     SUCCESS,
 };
 
+const messages = struct {
+    noPhotosAvailable: struct {
+        str: []const u8 = "no_photos_available",
+        pub fn func(_: @This(), client: *HttpClient) void {
+            client.state = .NO_PHOTOS_AVAILABLE; 
+        }
+    } = .{},
+
+    photosAvailable: struct {
+        str: []const u8 = "photos_available", 
+        pub fn func(_: @This(), client: *HttpClient) void {
+            client.state = .SUCCESS;
+        }
+    } = .{}
+}{};
+
 /// Request URL extensions
 const ServerPaths = struct {
-    const establishConnection = "/events";
-    const downloadRandomPhoto = "/getRandomPhoto";
+    const ESTABLISH_CONNECTION = "/events?category=display";
+    const DOWNLOAD_RANDOM_PHOTO = "/getRandomPhoto";
 };
 
 /// Responsible for connecting to server / downloading files
@@ -79,7 +95,7 @@ pub const HttpClient = struct {
             self.allocator, 
             &.{
                 self.server_url, 
-                ServerPaths.establishConnection,
+                ServerPaths.ESTABLISH_CONNECTION,
             }
         );
         defer self.allocator.free(server_path);
@@ -96,9 +112,20 @@ pub const HttpClient = struct {
 
         var res_buf: [4096]u8 = undefined;
         var res_reader = res.reader(&res_buf);
-        while (res_reader.takeDelimiterExclusive('\n')) |line| {
-            try self.log("{s}\n", .{line});
-            break;
+
+        while (res_reader.takeDelimiterInclusive('\n')) |line| {
+            if(line.len == 0) continue;
+            const trimmed = std.mem.trimRight(u8, line, "\n");
+            const stripped = std.mem.trimLeft(u8, trimmed, "data::");
+
+            inline for(std.meta.fields(@TypeOf(messages))) |field| {
+                const msg = @field(messages, field.name);
+                if(std.mem.eql(u8, stripped, msg.str)) { msg.func(self); }
+            }
+
+            try self.stdout.print("Status: {s}\r", .{@tagName(self.state)});
+            try self.stdout.flush();
+
         } else |err| switch(err) {
             error.EndOfStream => {}, 
             else => { return err; }
@@ -113,7 +140,7 @@ pub const HttpClient = struct {
             self.allocator, 
             &.{
                 self.server_url, 
-                ServerPaths.downloadRandomPhoto 
+                ServerPaths.DOWNLOAD_RANDOM_PHOTO,
             }
         );
         defer self.allocator.free(server_path);
@@ -141,7 +168,7 @@ pub const HttpClient = struct {
         var header_iter = res.head.iterateHeaders();
 
         // Parse headers from server requenst, specifically 'Content-Type'
-        // Avaialbe headers: Content-Type, X-File-Name, Date, Trasnfer-Encoding
+        // available headers: Content-Type, X-File-Name, Date, Trasnfer-Encoding
         // Content-Type values: 'image/jpeg', 'image/png'
         while(header_iter.next()) |header| {
             if(std.mem.eql(u8, header.name, "Content-Type")) {

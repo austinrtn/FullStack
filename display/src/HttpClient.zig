@@ -4,14 +4,14 @@ const messages = struct {
     noPhotosAvailable: struct {
         str: []const u8 = "no_photos_available",
         pub fn func(_: @This(), client: *HttpClient) void {
-            client.state = .NO_PHOTOS_AVAILABLE; 
+            client.photos_available = false;
         }
     } = .{},
 
     photosAvailable: struct {
         str: []const u8 = "photos_available", 
         pub fn func(_: @This(), client: *HttpClient) void {
-            client.state = .SUCCESS;
+            client.photos_available = true;
         }
     } = .{}
 }{};
@@ -98,17 +98,23 @@ pub const HttpClient = struct {
         
         const uri = try std.Uri.parse(server_path);
 
-        var request: ?*std.http.Client.Request = null;
-        var response: ?*std.http.Client.Response = null;
+        var request: ?std.http.Client.Request = null;
+        var response: ?std.http.Client.Response = null;
         var res_buf: [4096]u8 = undefined;
         var redir_buf: [4096]u8 = undefined;
         var res_reader: ?*std.io.Reader = null;
-        defer if(request) |req| req.deinit();
+        defer if(request) |*req| req.deinit();
        
+        const tool = struct {
+            fn print(str: []const u8) void {
+                std.debug.print("Made it to phase: {s}\n", .{str}); 
+            } 
+        };
         while(true) {
             if(!self.connected or request == null or response == null) {
+                tool.print("Inner loop");       
                 if(self.client.request(.GET, uri, .{})) 
-                    |*req| { request = req; }
+                    |req| { request = req; }
                 else |err| switch(err) {
                     error.ConnectionRefused => { 
                         self.connected = false; 
@@ -117,29 +123,38 @@ pub const HttpClient = struct {
                     else => { return err; }
                 }
 
-                const req = if(request) request.? orelse continue;
-                if(req.receiveHead(&redir_buf)) 
-                    |res| { response = res; } 
-                else |err| switch (err) {
-                    error.ConnectionRefused => {
-                        self.connected = false;
-                    },
-                    else => { return err; }
-                }
+                tool.print("Req success"); 
+                if(request) |*req| {
+                    tool.print("Inner req");
+                    if(req.receiveHead(&redir_buf)) 
+                        |res| { response = res; } 
+                    else |err| switch (err) {
+                        error.ConnectionRefused => {
+                            self.connected = false;
+                        },
+                        else => { return err; }
+                    }
 
-                const res = if(response) response.? orelse continue;
-                if(res.head.status == .ok) self.connected = true else continue;
 
-                try req.sendBodiless();
-                res_reader = res.reader(&res_buf);
+                    try req.sendBodiless();
+                    tool.print("After Response");
+
+                    if(response) |*res| {
+                        tool.print("Has Response");
+                        if(res.head.status == .ok) self.connected = true else continue;
+                        res_reader = res.reader(&res_buf);
+                    } else continue; 
+                } else continue;
             }
 
             if(!self.connected) continue;
+            tool.print("COnnected");
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
                 if(line.len == 0) continue;
                 const trimmed = std.mem.trimRight(u8, line, "\n");
                 const stripped = std.mem.trimLeft(u8, trimmed, "data::");
 
+                try self.stdout.print("Status: {}\r", .{self.connected});
                 inline for(std.meta.fields(@TypeOf(messages))) |field| {
                     const msg = @field(messages, field.name);
                     if(std.mem.eql(u8, stripped, msg.str)) { msg.func(self); }
@@ -149,7 +164,7 @@ pub const HttpClient = struct {
                 try self.stdout.flush();
 
             } else |err| switch(err) {
-                error.EndOfStream, error.ReadFailed, error.ConnectionRefused => { self.connected = false; }, 
+                error.EndOfStream, error.ReadFailed => { self.connected = false; }, 
                 else => { return err; }
             }
         }

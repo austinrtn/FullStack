@@ -1,11 +1,5 @@
 const std = @import("std");
 
-const ClientState = enum {
-    NOT_CONNECTED,
-    NO_PHOTOS_AVAILABLE,
-    SUCCESS,
-};
-
 const messages = struct {
     noPhotosAvailable: struct {
         str: []const u8 = "no_photos_available",
@@ -45,7 +39,9 @@ pub const HttpClient = struct {
     photo_dir: *std.fs.Dir, // Directory where photos are stored 
     stdout: *std.io.Writer, // Writes output to user
     client: std.http.Client, //std lib tool for requests 
-    state: ClientState = .NOT_CONNECTED,
+    connected: bool = false,
+    photos_available: bool = false,
+
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
@@ -101,34 +97,61 @@ pub const HttpClient = struct {
         defer self.allocator.free(server_path);
         
         const uri = try std.Uri.parse(server_path);
-        var req = try self.client.request(.GET, uri, .{});
-        defer req.deinit();
 
-        try req.sendBodiless();
-
-        var redir_buf: [4096]u8 = undefined;
-        var res = req.receiveHead(&redir_buf) catch return error.NoConnectionEstablished;
-        if(res.head.status != .ok) return error.NoConnectionEstablished;
-
+        var request: ?*std.http.Client.Request = null;
+        var response: ?*std.http.Client.Response = null;
         var res_buf: [4096]u8 = undefined;
-        var res_reader = res.reader(&res_buf);
+        var redir_buf: [4096]u8 = undefined;
+        var res_reader: ?*std.io.Reader = null;
+        defer if(request) |req| req.deinit();
+       
+        while(true) {
+            if(!self.connected or request == null or response == null) {
+                if(self.client.request(.GET, uri, .{})) 
+                    |*req| { request = req; }
+                else |err| switch(err) {
+                    error.ConnectionRefused => { 
+                        self.connected = false; 
+                        request = null; 
+                    },
+                    else => { return err; }
+                }
 
-        while (res_reader.takeDelimiterInclusive('\n')) |line| {
-            if(line.len == 0) continue;
-            const trimmed = std.mem.trimRight(u8, line, "\n");
-            const stripped = std.mem.trimLeft(u8, trimmed, "data::");
+                const req = if(request) request.? orelse continue;
+                if(req.receiveHead(&redir_buf)) 
+                    |res| { response = res; } 
+                else |err| switch (err) {
+                    error.ConnectionRefused => {
+                        self.connected = false;
+                    },
+                    else => { return err; }
+                }
 
-            inline for(std.meta.fields(@TypeOf(messages))) |field| {
-                const msg = @field(messages, field.name);
-                if(std.mem.eql(u8, stripped, msg.str)) { msg.func(self); }
+                const res = if(response) response.? orelse continue;
+                if(res.head.status == .ok) self.connected = true else continue;
+
+                try req.sendBodiless();
+                res_reader = res.reader(&res_buf);
             }
 
-            try self.stdout.print("Status: {s}\r", .{@tagName(self.state)});
-            try self.stdout.flush();
+            if(!self.connected) continue;
+            while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
+                if(line.len == 0) continue;
+                const trimmed = std.mem.trimRight(u8, line, "\n");
+                const stripped = std.mem.trimLeft(u8, trimmed, "data::");
 
-        } else |err| switch(err) {
-            error.EndOfStream => {}, 
-            else => { return err; }
+                inline for(std.meta.fields(@TypeOf(messages))) |field| {
+                    const msg = @field(messages, field.name);
+                    if(std.mem.eql(u8, stripped, msg.str)) { msg.func(self); }
+                }
+
+                try self.stdout.print("Status: {}\r", .{self.connected});
+                try self.stdout.flush();
+
+            } else |err| switch(err) {
+                error.EndOfStream, error.ReadFailed, error.ConnectionRefused => { self.connected = false; }, 
+                else => { return err; }
+            }
         }
     }
 

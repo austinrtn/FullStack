@@ -80,6 +80,7 @@ pub const HttpClient = struct {
         for(exts) |ext| {
             var buf: [1024]u8 = undefined;
             const path = try  std.fmt.bufPrint(&buf, "{s}{s}", .{self.photo_name, ext});
+
             self.photo_dir.deleteFile(path) catch |err| switch(err) {
                 error.FileNotFound => {}, 
                 else => { return err; },
@@ -114,8 +115,7 @@ pub const HttpClient = struct {
        
 
         while(true) {
-            //try self.stdout.print("Established: {}\r", .{self.connected});
-            try self.stdout.flush();
+            try self.printR("Established: {}", .{self.connected});
 
             if(!self.connected or request == null or response == null) {
                 if(self.client.request(.GET, uri, .{})) 
@@ -128,9 +128,11 @@ pub const HttpClient = struct {
                     else => { return err; }
                 }
 
+                try pt.setAndPrint("Made Request",  @src().line);
 
                 if(request) |*req| {
                     req.sendBodiless() catch continue;
+                    try pt.setAndPrint("Sent Bodieless",  @src().line);
                     if(req.receiveHead(&redir_buf)) |res| { 
                         response = res; 
                     } 
@@ -142,16 +144,19 @@ pub const HttpClient = struct {
                     }
 
                     if(response) |*res| {
+                        try pt.setAndPrint("Got Response",  @src().line);
                         if(res.head.status == .ok) self.connected = true else continue;
+                        try pt.setAndPrint("Response Ok",  @src().line);
                         res_reader = res.reader(&res_buf);
                     } else continue; 
                 } else continue;
             }
 
             if(!self.connected) continue;
-            
+            try self.printR("Established: {}", .{self.connected});
+
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
-               // try self.printR("Status: {}", .{self.connected});
+                try self.printR("Status: {} | Photos Available: {}", .{self.connected, self.photos_available});
 
                 if(line.len == 0) continue;
                 const trimmed = std.mem.trimRight(u8, line, "\n");
@@ -248,8 +253,8 @@ pub const HttpClient = struct {
 
     fn printR(self: *Self, comptime fmt: []const u8, args: anytype) !void {
         const str = fmt ++ "\r";
+        try self.stdout.print("\x1B[2K\r", .{});
         try self.stdout.print(str, args);
-        try self.stdout.print("\x1B[2K\rStatus: {}", .{self.connected});
         try self.stdout.flush();
     }
 };

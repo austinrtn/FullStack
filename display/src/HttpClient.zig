@@ -19,7 +19,7 @@ const messages = struct {
 
 /// Request URL extensions
 const ServerPaths = struct {
-    const ESTABLISH_CONNECTION = "/events?category=display";
+    const ESTABLISH_CONNECTION = "/events?category=DISPLAY";
     const DOWNLOAD_RANDOM_PHOTO = "/getRandomPhoto";
 };
 
@@ -137,7 +137,7 @@ pub const HttpClient = struct {
                         response = res; 
                     } 
                     else |err| switch (err) {
-                        error.ConnectionRefused => {
+                        error.ConnectionRefused, error.HttpConnectionClosing => {
                             self.connected = false;
                         },
                         else => { return err; }
@@ -156,7 +156,10 @@ pub const HttpClient = struct {
             try self.printR("Established: {}", .{self.connected});
 
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
-                try self.printR("Status: {} | Photos Available: {}", .{self.connected, self.photos_available});
+                try self.printR(
+                    "Status: {} | Photos Available: {}", 
+                    .{self.connected, self.photos_available}
+                );
 
                 if(line.len == 0) continue;
                 const trimmed = std.mem.trimRight(u8, line, "\n");
@@ -164,7 +167,8 @@ pub const HttpClient = struct {
 
                 inline for(std.meta.fields(@TypeOf(messages))) |field| {
                     const msg = @field(messages, field.name);
-                    if(std.mem.eql(u8, stripped, msg.str)) { msg.func(self); }
+                    //std.debug.print("{s}\n", .{stripped}); 
+                    if(std.mem.eql(u8, stripped, msg.str)) { std.debug.print("{s}\n", .{msg.str}); msg.func(self); }
                 }
 
             } else |err| switch(err) {

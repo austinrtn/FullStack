@@ -6,19 +6,34 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
-	"mime"
 )
 
 const PORT = ":3000"
 var lastImgName string = ""
 
+type ClientCategory string 
+const (
+	UI ClientCategory = "UI"
+	Display ClientCategory = "DISPLAY"
+)
+
+type BroadcastMsg string 
+const (
+	Refresh BroadcastMsg = "refresh"
+	ConnectionEstablished BroadcastMsg = "connection_established"
+	PhotosAvailable BroadcastMsg = "photos_available"
+	NoPhotosAvailable BroadcastMsg = "no_photos_available"
+)
+
 type Client struct {
 	//struct categories: 'ui', 'display'
-	Category string
+	Category ClientCategory
 }
 
 type ImgData struct {
@@ -33,12 +48,39 @@ type ImgPath struct {
 }
 
 type AppState struct {
-	Clients map[chan string] Client 
+	PhotoDirName string 
+	Clients map[chan BroadcastMsg] Client 
 	Mu sync.Mutex
-	PhotoDir []os.DirEntry
-
 	PhotosAvailable bool
-	PrevPhotosAvailable bool
+	LastRecordedLen int
+}
+
+func updateAppState(appState *AppState, dir []os.DirEntry) {
+	appState.Mu.Lock()
+	defer appState.Mu.Unlock()
+
+	currentLen := len(dir)
+
+	if !appState.PhotosAvailable && currentLen > 0 {
+		broadcastLocked(appState, Display, PhotosAvailable)
+		appState.PhotosAvailable = true
+	} else if appState.PhotosAvailable && appState.LastRecordedLen > 0 && currentLen == 0 {
+		broadcastLocked(appState, Display, NoPhotosAvailable)
+		appState.PhotosAvailable = false
+	}
+
+	appState.LastRecordedLen = currentLen
+}
+
+func openDir(res http.ResponseWriter, dirName string) (files []os.DirEntry, ok bool) {
+	files, err := os.ReadDir(dirName)
+
+	if err != nil {
+		http.Error(res, "Could not read photos director", http.StatusInternalServerError)	
+		return 
+	}
+	ok = true
+	return 
 }
 
 func main() {
@@ -49,43 +91,40 @@ func main() {
 	// Set root directory
 	http.Handle("/", fs)
 
-	err = os.MkdirAll("photos", 0755)
+	photos := http.FileServer(http.Dir("photos"))
+	http.Handle("/photos/", http.StripPrefix("/photos", photos))
+
+	appState := &AppState{
+		Clients: make(map[chan BroadcastMsg] Client),
+		PhotosAvailable: false,
+		PhotoDirName: "photos",
+		LastRecordedLen: 0,
+	}
+
+	err = os.MkdirAll(appState.PhotoDirName, 0755)
 	if err != nil {
 		log.Fatal("Error creating photos directory on server")
 		return
 	}
-	
 
-	photos := http.FileServer(http.Dir("photos"))
-	http.Handle("/photos/", http.StripPrefix("/photos", photos))
-
-	photoDir, err := os.ReadDir("Photos")
+	dir, err := os.ReadDir(appState.PhotoDirName)
 	if err != nil {
-		log.Fatal("Error accessing photo directory")
-		return
+		log.Fatalf("Error: %v", err)	
+		return; 
 	}
 
-	appState := &AppState{
-		Clients: make(map[chan string] Client),
-		PhotoDir: photoDir,
-		PhotosAvailable: false,
-		PrevPhotosAvailable: false,
-	}
+	updateAppState(appState, dir)
 
 	//Handle functions 
-	http.HandleFunc("/savePhoto", savePhoto)
-	http.HandleFunc("/getPhotos", getPhotos)
-	http.HandleFunc("/deletePhoto", deletePhoto)
-	http.HandleFunc("/getRandomPhoto", getRandomPhoto)
-	http.HandleFunc("/events", func(res http.ResponseWriter, req *http.Request){
-		sseHandler(appState, res, req)
-	})
+	http.HandleFunc("/events", func(res http.ResponseWriter, req *http.Request){ sseHandler(appState, res, req) })
+	http.HandleFunc("/getPhotos", func(res http.ResponseWriter, req *http.Request) { getPhotos(appState, res, req) })
+	http.HandleFunc("/savePhoto", func(res http.ResponseWriter, req *http.Request) { savePhoto(appState, res, req) })
+	http.HandleFunc("/deletePhoto", func(res http.ResponseWriter, req *http.Request) { deletePhoto(appState, res, req) })
+	http.HandleFunc("/getRandomPhoto",func(res http.ResponseWriter, req *http.Request) { getRandomPhoto(appState, res, req) })
 
 	// Listen to port, handle if error
 	log.Printf("Listening to %s\n\n", PORT)
-	err = http.ListenAndServe(PORT, nil)
-
-	if err != nil {
+	err = http.ListenAndServe(PORT, nil); if err != nil {
 		log.Fatal(err)
 	}
 }
@@ -99,29 +138,21 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	res.Header().Set("Cache-Control", "no-cache")
 	res.Header().Set("Connection", "keep-alive")
 
-	// For flushing messages to client 
 	flusher, ok := res.(http.Flusher)
-
 	if !ok {
 		http.Error(res, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
-	category := req.URL.Query().Get("category")
+
+	categoryStr := req.URL.Query().Get("category")
+	category := ClientCategory(strings.ToUpper(categoryStr))
 
 	// Add client chanel to client map.  Lock map to ensure 'single file' adding of Clients.
 	// Multiple Clients being connected at the same time without locking map can cause errors.
-	ch := make(chan string, 1)
-	appState.Mu.Unlock()
+	ch := make(chan BroadcastMsg, 1)
+	appState.Mu.Lock()
 	appState.Clients[ch] = Client{Category: category}
 	appState.Mu.Unlock()
-	flusher.Flush()
-
-	dir, err := os.ReadDir("photos")
-	if err != nil {
-		if logError(nil, err) { return }
-	}
-
-	flusher.Flush()
 
 	defer func() {
 		appState.Mu.Lock()
@@ -129,39 +160,47 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 		appState.Mu.Unlock()
 	}()
 
+	broadcastToClient(res, flusher, ConnectionEstablished)
+	if category == Display {
+		if appState.PhotosAvailable {
+			fmt.Println("True")
+			broadcastToClient(res, flusher, PhotosAvailable)
+		} else {
+			broadcastToClient(res, flusher, NoPhotosAvailable)
+		}
+	}
+
 	// Listen for messages to be added to the client's chanel, then flush it to the client 
 	for {
-		if category == "display" {
-			if len(dir) == 0 {
-				broadcast(appState, "display", "no_photos_available")	
-			} else {
-				broadcast(appState, "display", "no_photos_available")	
-			}
-		}
-
 		select {
 		case msg := <-ch:
-			// if client has message
-			fmt.Fprint(res, wrapData(msg))
-			flusher.Flush()
-
+			broadcastToClient(res, flusher, msg)
 		case <-req.Context().Done():
-			// if client discconects 
 			return
 		}
 	}
 }
 
+func broadcastToClient(res http.ResponseWriter, flusher http.Flusher, msg BroadcastMsg) {
+	fmt.Fprintf(res, "%s", wrapData(string(msg)))
+	flusher.Flush()
+}
+
 /// adds server message to client chanel that JS frontend listens for 
-func broadcast(appState *AppState, clientCategory string, msg string) {
+func broadcast(appState *AppState, clientCategory ClientCategory, msg BroadcastMsg) {
 	// Lock from adding clients to client map to not modify
 	// map while itereating through it 
 	appState.Mu.Lock()
 	defer appState.Mu.Unlock()
+	broadcastLocked(appState, clientCategory, msg)
+}
 
+/// Must be wrapped in AppState.Mu lock / unlock.  See broadcast function for example 
+func broadcastLocked(appState *AppState, clientCategory ClientCategory, msg BroadcastMsg) {
 	// For each client chanel, send message through it 
+
 	for ch := range appState.Clients {
-		if clientCategory == "" || clientCategory == appState.Clients[ch].Category {
+		if clientCategory == "" || clientCategory == appState.Clients[ch].Category{
 			select {
 				case ch <- msg:
 				default: 
@@ -174,19 +213,18 @@ func broadcast(appState *AppState, clientCategory string, msg string) {
 func getPhotos(appState *AppState, res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	res.Header().Set("Cache-Control", "no-cache")
-
-	// Get files from photos dir 
-	files, err := os.ReadDir("photos")
-	if err != nil {
-		log.Fatalf("Error: %v", err)
-		return
-	}
+	
+	dir, ok := openDir(res, appState.PhotoDirName)
+	if !ok { return }
+	
+	updateAppState(appState, dir)
+	if !appState.PhotosAvailable { return }
 
 	// Store imagePath structs to be converted into JSON 
 	var imgPaths []ImgPath
 
 	// For each file, create file path, convert into ImgPath struct and append to imgPaths
-	for _, file := range files {
+	for _, file := range dir {
 		if logError(nil, checkImgValid(file.Name(), file.IsDir())) { return }
 
 		// Create photo filepath 
@@ -204,7 +242,7 @@ func getPhotos(appState *AppState, res http.ResponseWriter, req *http.Request) {
 }
 
 /// Saves photo selected and send from JS client to File Server
-func savePhoto(res http.ResponseWriter, req *http.Request) {
+func savePhoto(appState *AppState, res http.ResponseWriter, req *http.Request) {
 	// Create data instance to save JSON to
  	var imgData ImgData
         var err error
@@ -218,29 +256,23 @@ func savePhoto(res http.ResponseWriter, req *http.Request) {
         defer req.Body.Close()
 
 	// Write bytes to file with permisions 
-	fileName := "photos/" + filepath.Base(imgData.FileName)
-	dir, err := os.ReadDir("photos")
-	if err != nil {
-		if logError(nil, err) { return }
-	}
-
-	previousDirLen := len(dir)
-
+	fileName := appState.PhotoDirName + "/" + filepath.Base(imgData.FileName)
+	
 	err = os.WriteFile(fileName, imgData.FileBytes, 0644)
-
-	if err == nil {
-		log.Printf("File '%s' downloaded!", imgData.FileName)
-		// Send message to client to refresh image list 
-		broadcast("ui", "refresh")
-		if previousDirLen == 0 { broadcast("display", "photos_available") }
-	} else {
+	if err != nil {
 		http.Error(res, "Error writing file", http.StatusBadRequest)
 		return
 	}
+
+	dir, ok := openDir(res, appState.PhotoDirName)
+	if !ok { return }
+	updateAppState(appState, dir)
+
+	log.Printf("File '%s' downloaded!", imgData.FileName) 
 }
 
 
-func deletePhoto(res http.ResponseWriter, req *http.Request) {
+func deletePhoto(appState *AppState, res http.ResponseWriter, req *http.Request) {
 	var imgPath ImgPath	
 
 	// Get path from JSON sent by client 
@@ -249,20 +281,29 @@ func deletePhoto(res http.ResponseWriter, req *http.Request) {
 
 	if logError(nil, err) { return }
 
-	broadcast("ui", "refresh")
+	dir, ok := openDir(res, appState.PhotoDirName)
+	if !ok { return}
+	updateAppState(appState, dir)
 }
 
-func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
-	files, err := os.ReadDir("photos")
-	if logError(nil, err) { return }
+func getRandomPhoto(appState *AppState, res http.ResponseWriter, req *http.Request) {
+	dir, ok := openDir(res, appState.PhotoDirName)
+	if !ok { return }
 
+	updateAppState(appState, dir)
+
+	if !appState.PhotosAvailable {
+		http.Error(res, "No photos photos_available", http.StatusNotFound)
+		return 
+	}
+			
 	var randFile os.DirEntry
 	var filePath string 
 	for {
-		randFile = files[rand.IntN(len(files))] 
+		randFile = dir[rand.IntN(len(dir))] 
 		filePath = filepath.Join("photos", randFile.Name())
 
-		if len(files) > 1 && lastImgName != randFile.Name() { 
+		if len(dir) > 1 && lastImgName != randFile.Name() { 
 			lastImgName = randFile.Name()
 			break 
 		} else { break } 
@@ -274,7 +315,10 @@ func getRandomPhoto(res http.ResponseWriter, req *http.Request) {
 
 	fileData, err := os.ReadFile(filePath)
 
-	if logError(nil, err) { return }
+	if err != nil {
+		http.Error(res, "Was unable to read requested file", http.StatusInternalServerError)
+		return 
+	}
 
 	res.Write(fileData)
 }
@@ -291,7 +335,7 @@ func logError(msg *string, err error) bool {
 }
 
 func wrapData(data string) string {
-	str := fmt.Sprintf("data::%s\n", data)
+	str := fmt.Sprintf("data::%s\n\n", data)
 	return str
 }
 

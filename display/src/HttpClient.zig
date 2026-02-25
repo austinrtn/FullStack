@@ -1,4 +1,5 @@
 const std = @import("std");
+const PhaseTool = @import("./PhaseTool.zig").PhaseTool;
 
 const messages = struct {
     noPhotosAvailable: struct {
@@ -87,6 +88,12 @@ pub const HttpClient = struct {
     }
 
     pub fn establishConnection(self: *Self) !void {
+        var pt = PhaseTool.init(self.allocator);
+        defer {
+            pt.printResults();
+            pt.deinit();
+        }
+
         const server_path = try std.fs.path.join(
             self.allocator, 
             &.{
@@ -105,8 +112,10 @@ pub const HttpClient = struct {
         var res_reader: ?*std.io.Reader = null;
         defer if(request) |*req| req.deinit();
        
+
         while(true) {
-            try self.printR("Status: {}", .{self.connected});
+            //try self.stdout.print("Established: {}\r", .{self.connected});
+            try self.stdout.flush();
 
             if(!self.connected or request == null or response == null) {
                 if(self.client.request(.GET, uri, .{})) 
@@ -118,6 +127,7 @@ pub const HttpClient = struct {
                     },
                     else => { return err; }
                 }
+
 
                 if(request) |*req| {
                     req.sendBodiless() catch continue;
@@ -139,8 +149,9 @@ pub const HttpClient = struct {
             }
 
             if(!self.connected) continue;
+            
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
-                try self.printR("Status: {}", .{self.connected});
+               // try self.printR("Status: {}", .{self.connected});
 
                 if(line.len == 0) continue;
                 const trimmed = std.mem.trimRight(u8, line, "\n");

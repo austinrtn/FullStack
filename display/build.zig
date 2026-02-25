@@ -35,6 +35,30 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
+    const PhaseToolExe= b.addExecutable(.{
+        .name = "display",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/PhaseTool.zig"),
+            .target = target,
+            .optimize = optimize, 
+            .imports = &.{}
+        }),
+
+    });
+
+    b.installArtifact(exe);
+
+    const phaseToolStep = b.step("phase", "Run app");
+    const phaseCmd = b.addRunArtifact(PhaseToolExe);
+
+    phaseToolStep.dependOn(&phaseCmd.step);
+    phaseCmd.step.dependOn(b.getInstallStep());
+
+    if(b.args) |args| {
+        phaseCmd.addArgs(args);
+    }
+
+
     const backend_exe = b.addExecutable(.{
         .name = "backend",
         .root_module = b.createModule(.{

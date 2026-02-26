@@ -38,16 +38,16 @@ pub fn main() !void {
     });
     defer client.deinit();
 
-    try client.startListening();
-    client.stopListening();
-    std.debug.print("Hello", .{});
+    try client.startListening(null);
+    defer client.stopListening();
+    std.Thread.sleep(std.time.ns_per_s * 1);
+    
+    try client.newEvent(
+        "data::connection_established", 
+        &conn,
+    );
+}
 
-    // const msg = client.events.get("connection_established");
-    //
-    // if(msg) |m| {
-    //     std.debug.print("Message: {any}", .{m});
-    // } else {
-    //     std.debug.print("No msg", .{});
-    // }
-    //
+fn conn (event: *HttpClient.Event, _: *HttpClient, _: *anyopaque) anyerror!void {
+    std.debug.print("{s}\n", .{event.msg});
 }

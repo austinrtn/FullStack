@@ -1,22 +1,6 @@
 const std = @import("std");
 const PhaseTool = @import("./PhaseTool.zig").PhaseTool;
 
-const serverMessages = struct {
-    noPhotosAvailable: struct {
-        msg: []const u8 = "no_photos_available",
-        pub fn func(_: @This(), client: *HttpClient) void {
-            client.photos_available = false;
-        }
-    } = .{},
-
-    photosAvailable: struct {
-        msg: []const u8 = "photos_available", 
-        pub fn func(_: @This(), client: *HttpClient) void {
-            client.photos_available = true;
-        }
-    } = .{}
-}{};
-
 /// Request URL extensions
 const ServerPaths = struct {
     const LISTEN = "/events?category=DISPLAY";
@@ -26,6 +10,13 @@ const ServerPaths = struct {
 /// Responsible for connecting to server / downloading files
 pub const HttpClient = struct {
     const Self = @This();
+
+    pub const Event = struct {
+        msg: []const u8,
+        onEvent: *const fn(_: *@This(), client: *HttpClient, ctx: *anyopaque) anyerror!void,
+        recieved: bool = false,
+    };
+
     const Config = struct {
         allocator: std.mem.Allocator,
         server_url: []const u8,
@@ -48,11 +39,11 @@ pub const HttpClient = struct {
 
     event_listener_req: ?std.http.Client.Request = null,
     event_listener_thread: ?std.Thread = null,
-    events: std.StringHashMap(bool) = undefined,
+    events: std.ArrayList(HttpClient.Event) = .{},
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
-        var self: Self = .{
+        const self: Self = .{
             .allocator = config.allocator,
             .server_url = config.server_url,
             .photo_name = config.photo_name,
@@ -61,7 +52,6 @@ pub const HttpClient = struct {
             .client = std.http.Client{.allocator = config.allocator}
         };
 
-        self.events = std.StringHashMap(bool).init(self.allocator);
         return self;
     }
 
@@ -72,7 +62,7 @@ pub const HttpClient = struct {
         }
 
         if(self.event_listener_req) |*req| req.deinit(); 
-        self.events.deinit();
+        self.events.deinit(self.allocator);
         self.client.deinit();
     }
 
@@ -87,21 +77,16 @@ pub const HttpClient = struct {
         try self.stdout.flush();
     }
 
-    fn deleteRandomPhoto(self: *Self) !void {
-        const exts = [_][]const u8{ ".jpg", ".jpeg", ".png", };
+    pub fn newEvent(self: *Self, eventMsg: []const u8, onEvent: *const fn(event: *Event, client: *HttpClient, ctx: *anyopaque) anyerror!void) !void {
+        const event = Event{
+            .msg = eventMsg, 
+            .onEvent = onEvent,
+        };
 
-        for(exts) |ext| {
-            var buf: [1024]u8 = undefined;
-            const path = try  std.fmt.bufPrint(&buf, "{s}{s}", .{self.photo_name, ext});
-
-            self.photo_dir.deleteFile(path) catch |err| switch(err) {
-                error.FileNotFound => {}, 
-                else => { return err; },
-            };
-        }
+        try self.events.append(self.allocator, event);
     }
 
-    pub fn eventListener(self: *Self) !void {
+    pub fn eventListener(self: *Self, ctx: *anyopaque) !void {
         const server_path = try std.fs.path.join(
             self.allocator, 
             &.{
@@ -157,15 +142,12 @@ pub const HttpClient = struct {
             if(!self.connected) continue;
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
                 if(!self.isListening()) break;
-               
                 if(line.len == 0) continue;
-                const trimmed = std.mem.trimRight(u8, line, "\n");
-                const stripped = std.mem.trimLeft(u8, trimmed, "data::");
 
-                _ = try self.events.getOrPut(stripped);
-                inline for(std.meta.fields(@TypeOf(serverMessages))) |field| {
-                    const server_msg = @field(serverMessages, field.name);
-                    if(std.mem.eql(u8, stripped, server_msg.msg)) { server_msg.func(self); }
+                for(self.events.items) |*event| {
+                    if(!event.recieved) continue;
+                    event.onEvent(event, self, ctx);
+                    event.recieved = false;
                 }
 
             } else |err| switch(err) {
@@ -175,11 +157,11 @@ pub const HttpClient = struct {
         }
     }
 
-    pub fn startListening(self: *Self) !void {
+    pub fn startListening(self: *Self, ctx: *anyopaque) !void {
         if(self.isListening()) @panic("HttpClient is already listening!  Call HttpClient.stopListening()");
 
         self.setIsListening(true);
-        self.event_listener_thread = try std.Thread.spawn(.{}, HttpClient.eventListener, .{self}); 
+        self.event_listener_thread = try std.Thread.spawn(.{}, HttpClient.eventListener, .{self, ctx}); 
     }
 
     pub fn stopListening(self: *Self) void {
@@ -287,4 +269,18 @@ pub const HttpClient = struct {
         try self.stdout.print(str, args);
         try self.stdout.flush();
     }
+    fn deleteRandomPhoto(self: *Self) !void {
+        const exts = [_][]const u8{ ".jpg", ".jpeg", ".png", };
+
+        for(exts) |ext| {
+            var buf: [1024]u8 = undefined;
+            const path = try  std.fmt.bufPrint(&buf, "{s}{s}", .{self.photo_name, ext});
+
+            self.photo_dir.deleteFile(path) catch |err| switch(err) {
+                error.FileNotFound => {}, 
+                else => { return err; },
+            };
+        }
+    }
+
 };

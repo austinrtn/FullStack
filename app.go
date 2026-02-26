@@ -163,7 +163,6 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	broadcastToClient(res, flusher, ConnectionEstablished)
 	if category == Display {
 		if appState.PhotosAvailable {
-			fmt.Println("True")
 			broadcastToClient(res, flusher, PhotosAvailable)
 		} else {
 			broadcastToClient(res, flusher, NoPhotosAvailable)

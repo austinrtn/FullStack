@@ -24,4 +24,6 @@ trying to solve problems.
 - app.go
 - http/index.html
 - http/src/src.js
+- ./display/src/main.zig / HttpClient.zig / 
 - flow.drawio
+

@@ -48,11 +48,10 @@ pub const HttpClient = struct {
 
     event_listener_req: ?std.http.Client.Request = null,
     event_listener_thread: ?std.Thread = null,
-    events: std.StringHashMap(bool) = undefined,
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
-        var self: Self = .{
+        const self: Self = .{
             .allocator = config.allocator,
             .server_url = config.server_url,
             .photo_name = config.photo_name,
@@ -61,7 +60,6 @@ pub const HttpClient = struct {
             .client = std.http.Client{.allocator = config.allocator}
         };
 
-        self.events = std.StringHashMap(bool).init(self.allocator);
         return self;
     }
 
@@ -72,7 +70,6 @@ pub const HttpClient = struct {
         }
 
         if(self.event_listener_req) |*req| req.deinit(); 
-        self.events.deinit();
         self.client.deinit();
     }
 
@@ -121,6 +118,7 @@ pub const HttpClient = struct {
         self.setIsListening(true);
         while(true) {
             if(!self.isListening()) break;
+            try self.printR("Established: {}", .{self.connected});
 
             if(!self.connected or self.event_listener_req == null or response == null) {
                 if(self.client.request(.GET, uri, .{})) 
@@ -154,15 +152,20 @@ pub const HttpClient = struct {
                 } else continue;
             }
 
+            try self.printR("Established: {}", .{self.connected});
             if(!self.connected) continue;
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
                 if(!self.isListening()) break;
-               
+
+                try self.printR(
+                    "Status: {} | Photos Available: {}", 
+                    .{self.connected, self.photos_available}
+                );
+
                 if(line.len == 0) continue;
                 const trimmed = std.mem.trimRight(u8, line, "\n");
                 const stripped = std.mem.trimLeft(u8, trimmed, "data::");
 
-                _ = try self.events.getOrPut(stripped);
                 inline for(std.meta.fields(@TypeOf(serverMessages))) |field| {
                     const server_msg = @field(serverMessages, field.name);
                     if(std.mem.eql(u8, stripped, server_msg.msg)) { server_msg.func(self); }
@@ -190,6 +193,7 @@ pub const HttpClient = struct {
                 std.posix.shutdown(stream, .recv) catch {};
             }
         }
+
         if(self.event_listener_thread) |thread| { thread.join(); }
         if(self.event_listener_req) |*req| { req.deinit(); }
 

@@ -36,12 +36,18 @@ pub fn main() !void {
         .photo_dir = &photo_dir,
         .stdout = writer,
     });
-    //defer client.deinit();
+    defer client.deinit();
 
-    const thread = try std.Thread.spawn(.{}, HttpClient.eventListener, .{&client});
-
-    std.Thread.sleep(std.time.ns_per_s * 3);
+    try client.startListening();
     client.stopListening();
-    thread.join();
-    client.deinit();
+    std.debug.print("Hello", .{});
+
+    // const msg = client.events.get("connection_established");
+    //
+    // if(msg) |m| {
+    //     std.debug.print("Message: {any}", .{m});
+    // } else {
+    //     std.debug.print("No msg", .{});
+    // }
+    //
 }

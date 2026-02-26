@@ -18,6 +18,10 @@ pub fn main() !void {
     const photo_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{root_path, photo_dir_name});
     defer allocator.free(photo_path);
 
+    std.fs.cwd().makeDir(photo_path) catch |err| switch(err) {
+        error.PathAlreadyExists => {},
+        else => { return err; }
+    };
     var photo_dir = try std.fs.cwd().openDir(photo_path, .{.iterate = true});
     defer photo_dir.close();
 
@@ -32,7 +36,12 @@ pub fn main() !void {
         .photo_dir = &photo_dir,
         .stdout = writer,
     });
+    //defer client.deinit();
 
-    defer client.deinit();
-    try client.establishConnection();
+    const thread = try std.Thread.spawn(.{}, HttpClient.eventListener, .{&client});
+
+    std.Thread.sleep(std.time.ns_per_s * 3);
+    client.stopListening();
+    thread.join();
+    client.deinit();
 }

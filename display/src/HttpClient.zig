@@ -1,16 +1,16 @@
 const std = @import("std");
 const PhaseTool = @import("./PhaseTool.zig").PhaseTool;
 
-const messages = struct {
+const serverMessages = struct {
     noPhotosAvailable: struct {
-        str: []const u8 = "no_photos_available",
+        msg: []const u8 = "no_photos_available",
         pub fn func(_: @This(), client: *HttpClient) void {
             client.photos_available = false;
         }
     } = .{},
 
     photosAvailable: struct {
-        str: []const u8 = "photos_available", 
+        msg: []const u8 = "photos_available", 
         pub fn func(_: @This(), client: *HttpClient) void {
             client.photos_available = true;
         }
@@ -37,12 +37,16 @@ pub const HttpClient = struct {
     allocator: std.mem.Allocator,
     server_url: []const u8,
     photo_name: []const u8,
+
     photo_dir: *std.fs.Dir, // Directory where photos are stored 
     stdout: *std.io.Writer, // Writes output to user
     client: std.http.Client, //std lib tool for requests 
+                             //
     connected: bool = false,
     photos_available: bool = false,
+    listening: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
+    event_listener_req: ?std.http.Client.Request = null,
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
@@ -58,14 +62,14 @@ pub const HttpClient = struct {
         return self;
     }
 
+    pub fn deinit(self: *Self) void {
+        if(self.event_listener_req) |*req| req.deinit(); 
+        self.client.deinit();
+    }
 
     pub fn resetClient(self: *Self) void {
         self.client.deinit();
         self.client = std.http.Client{.allocator = self.allocator};
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.client.deinit();
     }
 
     /// Log message to console 
@@ -88,13 +92,7 @@ pub const HttpClient = struct {
         }
     }
 
-    pub fn establishConnection(self: *Self) !void {
-        var pt = PhaseTool.init(self.allocator);
-        defer {
-            pt.printResults();
-            pt.deinit();
-        }
-
+    pub fn eventListener(self: *Self) !void {
         const server_path = try std.fs.path.join(
             self.allocator, 
             &.{
@@ -106,56 +104,52 @@ pub const HttpClient = struct {
         
         const uri = try std.Uri.parse(server_path);
 
-        var request: ?std.http.Client.Request = null;
         var response: ?std.http.Client.Response = null;
         var res_buf: [4096]u8 = undefined;
         var redir_buf: [4096]u8 = undefined;
         var res_reader: ?*std.io.Reader = null;
-        defer if(request) |*req| req.deinit();
-       
 
+        self.setIsListening(true);
         while(true) {
-            try self.printR("Established: {}", .{self.connected});
+            if(!self.isListening()) break;
 
-            if(!self.connected or request == null or response == null) {
+            if(!self.connected or self.event_listener_req == null or response == null) {
                 if(self.client.request(.GET, uri, .{})) 
-                    |req| { request = req; }
+                    |req| { self.event_listener_req = req; }
                 else |err| switch(err) {
                     error.ConnectionRefused => { 
                         self.connected = false; 
-                        request = null; 
+                        self.event_listener_req = null; 
                     },
                     else => { return err; }
                 }
 
-                try pt.setAndPrint("Made Request",  @src().line);
-
-                if(request) |*req| {
+                if(self.event_listener_req) |*req| {
                     req.sendBodiless() catch continue;
-                    try pt.setAndPrint("Sent Bodieless",  @src().line);
                     if(req.receiveHead(&redir_buf)) |res| { 
                         response = res; 
                     } 
                     else |err| switch (err) {
                         error.ConnectionRefused, error.HttpConnectionClosing => {
                             self.connected = false;
+                            req.deinit();
+                            self.event_listener_req = null;
                         },
                         else => { return err; }
                     }
 
                     if(response) |*res| {
-                        try pt.setAndPrint("Got Response",  @src().line);
                         if(res.head.status == .ok) self.connected = true else continue;
-                        try pt.setAndPrint("Response Ok",  @src().line);
                         res_reader = res.reader(&res_buf);
                     } else continue; 
                 } else continue;
             }
 
-            if(!self.connected) continue;
             try self.printR("Established: {}", .{self.connected});
-
+            if(!self.connected) continue;
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
+                if(!self.isListening()) break;
+
                 try self.printR(
                     "Status: {} | Photos Available: {}", 
                     .{self.connected, self.photos_available}
@@ -165,10 +159,9 @@ pub const HttpClient = struct {
                 const trimmed = std.mem.trimRight(u8, line, "\n");
                 const stripped = std.mem.trimLeft(u8, trimmed, "data::");
 
-                inline for(std.meta.fields(@TypeOf(messages))) |field| {
-                    const msg = @field(messages, field.name);
-                    //std.debug.print("{s}\n", .{stripped}); 
-                    if(std.mem.eql(u8, stripped, msg.str)) { std.debug.print("{s}\n", .{msg.str}); msg.func(self); }
+                inline for(std.meta.fields(@TypeOf(serverMessages))) |field| {
+                    const server_msg = @field(serverMessages, field.name);
+                    if(std.mem.eql(u8, stripped, server_msg.msg)) { server_msg.func(self); }
                 }
 
             } else |err| switch(err) {
@@ -178,9 +171,26 @@ pub const HttpClient = struct {
         }
     }
 
+    pub fn isListening(self: *Self) bool {
+        return self.listening.load(.acquire);
+    }
+
+    pub fn setIsListening(self: *Self, val: bool) void {
+        self.listening.store(val, .release);
+    }
+
+    pub fn stopListening(self: *Self) void {
+        self.setIsListening(false);
+        if(self.event_listener_req) |*req| {
+            if(req.connection) |conn| {
+                const stream = conn.stream_reader.getStream().handle;
+                std.posix.shutdown(stream, .recv) catch {};
+            }
+        }
+    }
+
     /// Request a random photo from the server and download locally
     pub fn downloadRandomPhoto(self: *Self) !void {
-
         try self.deleteRandomPhoto();
         const server_path = try std.fs.path.join(
             self.allocator, 

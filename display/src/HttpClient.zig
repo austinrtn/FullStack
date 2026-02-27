@@ -8,13 +8,20 @@ const ServerPaths = struct {
 };
 
 /// Responsible for connecting to server / downloading files
-pub const HttpClient = struct {
+pub fn HttpClient(comptime CtxType: type) type{
+    return struct {
     const Self = @This();
+    const T = HttpClient(CtxType);
+
+    pub const EventPkg = struct {
+        ctx: *CtxType, 
+        client: *HttpClient(CtxType),
+        std_out: *std.io.Writer,
+    };
 
     pub const Event = struct {
         msg: []const u8,
-        onEvent: *const fn(_: *@This(), client: *HttpClient, ctx: *anyopaque) anyerror!void,
-        recieved: bool = false,
+        onEvent: *const fn(_: *@This(), pkg: *EventPkg) anyerror!void,
     };
 
     const Config = struct {
@@ -22,7 +29,8 @@ pub const HttpClient = struct {
         server_url: []const u8,
         photo_name: []const u8,
         photo_dir: *std.fs.Dir,
-        stdout: *std.io.Writer
+        stdout: *std.io.Writer,
+        ctx: *CtxType,
     };
 
     allocator: std.mem.Allocator,
@@ -37,9 +45,10 @@ pub const HttpClient = struct {
     photos_available: bool = false,
     listening: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
+    ctx: *CtxType,
     event_listener_req: ?std.http.Client.Request = null,
     event_listener_thread: ?std.Thread = null,
-    events: std.ArrayList(HttpClient.Event) = .{},
+    events: std.ArrayList(Event) = .{},
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
@@ -49,7 +58,8 @@ pub const HttpClient = struct {
             .photo_name = config.photo_name,
             .photo_dir = config.photo_dir,
             .stdout = config.stdout,
-            .client = std.http.Client{.allocator = config.allocator}
+            .client = std.http.Client{.allocator = config.allocator},
+            .ctx = config.ctx,
         };
 
         return self;
@@ -72,12 +82,16 @@ pub const HttpClient = struct {
     }
 
     /// Log message to console 
-    fn log(self: *Self, comptime fmt: []const u8, args: anytype) !void{
+    fn log(self: *Self, comptime fmt: []const u8, args: anytype) !void {
         try self.stdout.print(fmt, args);
         try self.stdout.flush();
     }
 
-    pub fn newEvent(self: *Self, eventMsg: []const u8, onEvent: *const fn(event: *Event, client: *HttpClient, ctx: *anyopaque) anyerror!void) !void {
+    pub fn newEvent(
+        self: *Self, 
+        eventMsg: []const u8, 
+        comptime onEvent: *const fn(event: *Event, pkg: *EventPkg) anyerror!void )!void {
+
         const event = Event{
             .msg = eventMsg, 
             .onEvent = onEvent,
@@ -86,7 +100,7 @@ pub const HttpClient = struct {
         try self.events.append(self.allocator, event);
     }
 
-    pub fn eventListener(self: *Self, ctx: *anyopaque) !void {
+    pub fn eventListener(self: *Self) !void {
         const server_path = try std.fs.path.join(
             self.allocator, 
             &.{
@@ -145,9 +159,9 @@ pub const HttpClient = struct {
                 if(line.len == 0) continue;
 
                 for(self.events.items) |*event| {
-                    if(!event.recieved) continue;
-                    event.onEvent(event, self, ctx);
-                    event.recieved = false;
+                    if(!std.mem.eql(u8, event.msg, line)) continue;
+                    var pkg = EventPkg{.client = self, .ctx = self.ctx, .std_out = self.stdout};
+                    try event.onEvent(event, &pkg);
                 }
 
             } else |err| switch(err) {
@@ -157,11 +171,11 @@ pub const HttpClient = struct {
         }
     }
 
-    pub fn startListening(self: *Self, ctx: *anyopaque) !void {
+    pub fn startListening(self: *Self) !void {
         if(self.isListening()) @panic("HttpClient is already listening!  Call HttpClient.stopListening()");
 
         self.setIsListening(true);
-        self.event_listener_thread = try std.Thread.spawn(.{}, HttpClient.eventListener, .{self, ctx}); 
+        self.event_listener_thread = try std.Thread.spawn(.{}, HttpClient(CtxType).eventListener, .{self}); 
     }
 
     pub fn stopListening(self: *Self) void {
@@ -269,6 +283,7 @@ pub const HttpClient = struct {
         try self.stdout.print(str, args);
         try self.stdout.flush();
     }
+
     fn deleteRandomPhoto(self: *Self) !void {
         const exts = [_][]const u8{ ".jpg", ".jpeg", ".png", };
 
@@ -283,4 +298,4 @@ pub const HttpClient = struct {
         }
     }
 
-};
+};}

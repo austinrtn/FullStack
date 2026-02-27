@@ -1,6 +1,10 @@
 const std = @import("std");
 const HttpClient = @import("./HttpClient.zig").HttpClient;
 
+const Context = struct {
+    hello: []const u8 = "world",
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -29,25 +33,29 @@ pub fn main() !void {
     var stdout = std.fs.File.stdout().writer(&stdout_buf);
     const writer = &stdout.interface;
 
-    var client = HttpClient.init(.{
+    var ctx = Context{};
+
+    const Client = HttpClient(Context);
+    var client = Client.init(.{
         .allocator = allocator, 
         .server_url = server_url,
         .photo_name = photo_name,
         .photo_dir = &photo_dir,
         .stdout = writer,
+        .ctx = &ctx,
     });
     defer client.deinit();
 
-    try client.startListening(null);
+    try client.startListening();
     defer client.stopListening();
-    std.Thread.sleep(std.time.ns_per_s * 1);
+
     
     try client.newEvent(
-        "data::connection_established", 
-        &conn,
+        "data::conection_established",
+        &conn
     );
 }
 
-fn conn (event: *HttpClient.Event, _: *HttpClient, _: *anyopaque) anyerror!void {
+fn conn (event: *HttpClient(Context).Event, _: *HttpClient(Context).EventPkg) anyerror!void {
     std.debug.print("{s}\n", .{event.msg});
 }

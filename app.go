@@ -121,12 +121,24 @@ func main() {
 	http.HandleFunc("/savePhoto", func(res http.ResponseWriter, req *http.Request) { savePhoto(appState, res, req) })
 	http.HandleFunc("/deletePhoto", func(res http.ResponseWriter, req *http.Request) { deletePhoto(appState, res, req) })
 	http.HandleFunc("/getRandomPhoto",func(res http.ResponseWriter, req *http.Request) { getRandomPhoto(appState, res, req) })
+	http.HandleFunc("/test", test);
 
 	// Listen to port, handle if error
 	log.Printf("Listening to %s\n\n", PORT)
 	err = http.ListenAndServe(PORT, nil); if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func test(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("Content-Type", "json")
+	
+	type Test struct {
+		Msg string `json:"msg"`
+	}
+
+	t := Test{Msg: "Hello from the otherside"}
+	json.NewEncoder(res).Encode(t)
 }
 
 /// Function that is ran when client enters server.  Creates string chanel for client 
@@ -153,6 +165,8 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	appState.Mu.Lock()
 	appState.Clients[ch] = Client{Category: category}
 	appState.Mu.Unlock()
+
+	fmt.Printf("%s\n\n", category)
 
 	defer func() {
 		appState.Mu.Lock()

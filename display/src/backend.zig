@@ -1,61 +1,49 @@
 const std = @import("std");
-const HttpClient = @import("./HttpClient.zig").HttpClient;
+const Httplib = @import("./HttpClient.zig");
+const HttpClient = Httplib.HttpClient(Context);
 
-const Context = struct {
-    hello: []const u8 = "world",
-};
+const Context = struct { established: bool = false};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    var args = std.process.args();
-    defer args.deinit();
-    _ = args.next();
-
-    const root_path = args.next() orelse return error.NoRootPath;
-    const server_url = args.next() orelse return error.NoServerURL;
-    const photo_name = args.next() orelse return error.NoPhotoName;
-    const photo_dir_name = args.next() orelse return error.NoPhotoDir;
-
-    const photo_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{root_path, photo_dir_name});
-    defer allocator.free(photo_path);
-
-    std.fs.cwd().makeDir(photo_path) catch |err| switch(err) {
-        error.PathAlreadyExists => {},
-        else => { return err; }
-    };
-    var photo_dir = try std.fs.cwd().openDir(photo_path, .{.iterate = true});
-    defer photo_dir.close();
-
     var stdout_buf: [4096]u8 = undefined;
-    var stdout = std.fs.File.stdout().writer(&stdout_buf);
-    const writer = &stdout.interface;
+    var writer = std.fs.File.stdout().writer(&stdout_buf);
+    const stdout = &writer.interface;
 
     var ctx = Context{};
-
-    const Client = HttpClient(Context);
-    var client = Client.init(.{
+    std.debug.print("Established: {}\n", .{ctx.established});
+    var client = HttpClient.init(.{
         .allocator = allocator, 
-        .server_url = server_url,
-        .photo_name = photo_name,
-        .photo_dir = &photo_dir,
-        .stdout = writer,
-        .ctx = &ctx,
+        .stdout = stdout,
+        .ctx = &ctx, 
     });
     defer client.deinit();
 
-    try client.startListening();
-    defer client.stopListening();
+    var listener = try client.newEventListener();
 
-    
-    try client.newEvent(
-        "data::conection_established",
-        &conn
+    try listener.newEvent(
+        "data::connection_established",
+        struct {fn func(event: *HttpClient.Event) !void {
+            event.ctx.established = true;
+            try event.stdout.writeAll("Dick And Balls!\n");
+            try event.stdout.flush();
+        }}.func,
     );
-}
 
-fn conn (event: *HttpClient(Context).Event, _: *HttpClient(Context).EventPkg) anyerror!void {
-    std.debug.print("{s}\n", .{event.msg});
+    try listener.startListening("http://localhost:3000/events?category=DISPLAY");
+    defer listener.stopListening();
+    std.Thread.sleep(std.time.ns_per_s * 1); 
+    std.debug.print("Established: {}\n", .{ctx.established});
+
+    while(true) {
+        var req = client.get("http://localhost:3000/test", .{}) catch |err| switch(err){ else => {continue;} };
+        defer req.deinit();
+
+        try stdout.print("{s}\n", .{req.body});
+        try stdout.flush();
+        break;
+    }
 }

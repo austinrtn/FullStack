@@ -1,117 +1,203 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const PhaseTool = @import("./PhaseTool.zig").PhaseTool;
 
-/// Request URL extensions
-const ServerPaths = struct {
-    const LISTEN = "/events?category=DISPLAY";
-    const DOWNLOAD_RANDOM_PHOTO = "/getRandomPhoto";
+const ReqErrors = error{
+    BadURL,
+    RequestSendFailed,
+    SendBodilessFailed,
+    RecivedHeadersFailed,
+    FailedReadingBody,
 };
 
-/// Responsible for connecting to server / downloading files
-pub fn HttpClient(comptime CtxType: type) type{
-    return struct {
-    const Self = @This();
-    const T = HttpClient(CtxType);
-
-    pub const EventPkg = struct {
-        ctx: *CtxType, 
-        client: *HttpClient(CtxType),
-        std_out: *std.io.Writer,
-    };
+pub fn HttpClient(comptime ContextType: type) type{
+    const CtxField:type = if(ContextType == void) void else *ContextType; 
+return struct {
+    pub const Self = @This();
+    pub const Req = std.http.Client.Request;
+    pub const Res = std.http.Client.Response;
 
     pub const Event = struct {
         msg: []const u8,
-        onEvent: *const fn(_: *@This(), pkg: *EventPkg) anyerror!void,
+        ctx: CtxField, 
+        stdout: *std.io.Writer,
+        onEvent: *const fn(_: *@This()) anyerror!void,
     };
 
     const Config = struct {
         allocator: std.mem.Allocator,
-        server_url: []const u8,
-        photo_name: []const u8,
-        photo_dir: *std.fs.Dir,
         stdout: *std.io.Writer,
-        ctx: *CtxType,
+        ctx: CtxField,
     };
 
     allocator: std.mem.Allocator,
-    server_url: []const u8,
-    photo_name: []const u8,
-
-    photo_dir: *std.fs.Dir, // Directory where photos are stored 
     stdout: *std.io.Writer, // Writes output to user
-    client: std.http.Client, //std lib tool for requests 
-                             //
-    connected: bool = false,
-    photos_available: bool = false,
-    listening: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
-
-    ctx: *CtxType,
-    event_listener_req: ?std.http.Client.Request = null,
-    event_listener_thread: ?std.Thread = null,
-    events: std.ArrayList(Event) = .{},
+    ctx: CtxField,
+    listeners: std.ArrayList(*EventListener(ContextType)) = .{},
 
     /// Create new instanceo of HTTPClient 
     pub fn init(config: Config) Self {
         const self: Self = .{
             .allocator = config.allocator,
-            .server_url = config.server_url,
-            .photo_name = config.photo_name,
-            .photo_dir = config.photo_dir,
             .stdout = config.stdout,
-            .client = std.http.Client{.allocator = config.allocator},
             .ctx = config.ctx,
-        };
 
+        };
         return self;
     }
 
     pub fn deinit(self: *Self) void {
-        if(self.isListening()) {
-            self.stopListening();
-            @panic("Must call HttpClient.stopListening after calling HttpClient.startListening()");
+        for(self.listeners.items) |listener| { 
+            listener.deinit();
+            self.allocator.destroy(listener);
+        }
+        self.listeners.deinit(self.allocator);
+    }
+
+    pub fn get(self: *Self, url: []const u8, req_options: std.http.Client.RequestOptions) (ReqErrors || std.mem.Allocator.Error)!*Response{
+        const response_ptr = try self.allocator.create(Response);
+        errdefer self.allocator.destroy(response_ptr);
+        response_ptr.* = try Response.init(self.allocator, self.stdout, url, req_options);
+        errdefer response_ptr.deinit();
+
+        return response_ptr;
+    }
+
+    pub fn newEventListener(self: *Self) !*EventListener(ContextType) {
+        const event_listener_ptr = try self.allocator.create(EventListener(ContextType));
+        event_listener_ptr.* = EventListener(ContextType).init(self.allocator, self);  
+        try self.listeners.append(self.allocator, event_listener_ptr);
+        return event_listener_ptr;
+    }
+};}
+
+pub const Response = struct {
+    stdout: *std.io.Writer,
+
+    allocator: std.mem.Allocator,
+    client: *std.http.Client,
+    req: *std.http.Client.Request,
+    status: std.http.Status,
+    headers: []std.http.Header,
+    body: []const u8,
+
+    pub fn init(allocator: std.mem.Allocator, stdout: *std.io.Writer, url: []const u8, req_options: std.http.Client.RequestOptions) (ReqErrors || std.mem.Allocator.Error)!Response {
+        var self: @This() = undefined;
+        self.allocator = allocator;
+        self.stdout = stdout;
+
+        var headers = std.ArrayList(std.http.Header){};
+        defer headers.deinit(self.allocator);
+
+        // New client to make request
+        self.client = try allocator.create(std.http.Client);
+        errdefer self.allocator.destroy(self.client);
+        self.client.* = std.http.Client{.allocator = self.allocator};
+        errdefer self.client.deinit();
+
+        self.req = try self.allocator.create(std.http.Client.Request);
+        errdefer allocator.destroy(self.req);
+
+        const uri = std.Uri.parse(url) catch return ReqErrors.BadURL;
+        self.req.* = self.client.request(.GET, uri, req_options) catch return ReqErrors.RequestSendFailed;
+        errdefer self.req.deinit();
+
+        // Send request to server
+        var redir_buf: [1024]u8 = undefined; 
+        self.req.sendBodiless() catch return ReqErrors.SendBodilessFailed;
+
+        var res = self.req.receiveHead(&redir_buf) catch return ReqErrors.RecivedHeadersFailed;
+
+        var header_iter = res.head.iterateHeaders();
+        while(header_iter.next()) |header| {
+            try headers.append(self.allocator, header);
         }
 
-        if(self.event_listener_req) |*req| req.deinit(); 
-        self.events.deinit(self.allocator);
-        self.client.deinit();
+        self.headers = try headers.toOwnedSlice(self.allocator);
+        self.body = res.reader(&.{}).allocRemaining(self.allocator, .unlimited) catch return ReqErrors.FailedReadingBody;
+
+        return self;
     }
 
-    pub fn resetClient(self: *Self) void {
+    pub fn deinit(self: *@This()) void {
+        self.req.deinit(); 
         self.client.deinit();
-        self.client = std.http.Client{.allocator = self.allocator};
+
+        self.allocator.free(self.body);
+        self.allocator.free(self.headers);
+        self.allocator.destroy(self.req);
+        self.allocator.destroy(self.client);
+        self.allocator.destroy(self);
+    }
+};
+
+
+fn EventListener(comptime ContextType: type) type {
+    const HttpClientT = HttpClient(ContextType);
+return struct {
+    const Self = @This();
+    const Event = HttpClientT.Event;
+
+    allocator: std.mem.Allocator,
+    http_client: *HttpClientT,
+    client: std.http.Client,
+
+    listening: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    req: ?std.http.Client.Request = null,
+    thread: ?std.Thread = null,
+    events: std.ArrayList(Event) = .{},
+    connected: bool = false,
+
+
+    pub fn init(allocator: std.mem.Allocator, http_client: *HttpClientT) Self {
+        return .{
+            .allocator = allocator, 
+            .http_client = http_client,
+            .client = std.http.Client{.allocator = allocator}, 
+        };
     }
 
-    /// Log message to console 
-    fn log(self: *Self, comptime fmt: []const u8, args: anytype) !void {
-        try self.stdout.print(fmt, args);
-        try self.stdout.flush();
+    pub fn isListening(self: *Self) bool {
+        return self.listening.load(.acquire);
+    }
+
+    fn setIsListening(self: *Self, val: bool) void {
+        self.listening.store(val, .release);
     }
 
     pub fn newEvent(
         self: *Self, 
         eventMsg: []const u8, 
-        comptime onEvent: *const fn(event: *Event, pkg: *EventPkg) anyerror!void )!void {
+        comptime onEvent: *const fn(event: *Event) anyerror!void )!void {
 
         const event = Event{
             .msg = eventMsg, 
             .onEvent = onEvent,
+            .ctx = self.http_client.ctx, 
+            .stdout = self.http_client.stdout,
         };
 
         try self.events.append(self.allocator, event);
     }
 
-    pub fn eventListener(self: *Self) !void {
-        const server_path = try std.fs.path.join(
-            self.allocator, 
-            &.{
-                self.server_url, 
-                ServerPaths.LISTEN,
-            }
-        );
-        defer self.allocator.free(server_path);
-        
-        const uri = try std.Uri.parse(server_path);
 
+    pub fn deinit(self: *Self) void {
+        const was_running = self.isListening();
+        if(self.isListening()) {
+            self.stopListening();
+            if(builtin.mode == .Debug and was_running) {
+                std.debug.print("\nHttpClient.stopListening must be called before deinit\n\n", .{});
+                std.debug.assert(!was_running);
+            }
+        }
+
+        self.events.deinit(self.allocator);
+        if(self.req) |*req| req.deinit(); 
+        self.client.deinit();
+    }
+
+    pub fn listen(self: *Self, url: []const u8) !void {
+        const uri = try std.Uri.parse(url);
         var response: ?std.http.Client.Response = null;
         var res_buf: [4096]u8 = undefined;
         var redir_buf: [4096]u8 = undefined;
@@ -121,18 +207,18 @@ pub fn HttpClient(comptime CtxType: type) type{
         while(true) {
             if(!self.isListening()) break;
 
-            if(!self.connected or self.event_listener_req == null or response == null) {
+            if(!self.connected or self.req == null or response == null) {
                 if(self.client.request(.GET, uri, .{})) 
-                    |req| { self.event_listener_req = req; }
+                    |req| { self.req = req; }
                 else |err| switch(err) {
                     error.ConnectionRefused => { 
                         self.connected = false; 
-                        self.event_listener_req = null; 
+                        self.req = null; 
                     },
                     else => { return err; }
                 }
 
-                if(self.event_listener_req) |*req| {
+                if(self.req) |*req| {
                     req.sendBodiless() catch continue;
                     if(req.receiveHead(&redir_buf)) |res| { 
                         response = res; 
@@ -141,7 +227,7 @@ pub fn HttpClient(comptime CtxType: type) type{
                         error.ConnectionRefused, error.HttpConnectionClosing => {
                             self.connected = false;
                             req.deinit();
-                            self.event_listener_req = null;
+                            self.req = null;
                         },
                         else => { return err; }
                     }
@@ -157,11 +243,11 @@ pub fn HttpClient(comptime CtxType: type) type{
             while (res_reader.?.takeDelimiterInclusive('\n')) |line| {
                 if(!self.isListening()) break;
                 if(line.len == 0) continue;
+                const server_msg = std.mem.trimRight(u8, line, "\n");
 
                 for(self.events.items) |*event| {
-                    if(!std.mem.eql(u8, event.msg, line)) continue;
-                    var pkg = EventPkg{.client = self, .ctx = self.ctx, .std_out = self.stdout};
-                    try event.onEvent(event, &pkg);
+                    if(!std.mem.eql(u8, event.msg, server_msg)) continue;
+                    try event.onEvent(event);
                 }
 
             } else |err| switch(err) {
@@ -171,131 +257,27 @@ pub fn HttpClient(comptime CtxType: type) type{
         }
     }
 
-    pub fn startListening(self: *Self) !void {
+    pub fn startListening(self: *Self, url: []const u8) !void {
         if(self.isListening()) @panic("HttpClient is already listening!  Call HttpClient.stopListening()");
 
         self.setIsListening(true);
-        self.event_listener_thread = try std.Thread.spawn(.{}, HttpClient(CtxType).eventListener, .{self}); 
+        self.thread = try std.Thread.spawn(.{}, Self.listen, .{self, url}); 
     }
 
     pub fn stopListening(self: *Self) void {
         self.setIsListening(false);
-        if(self.event_listener_req) |*req| {
+        self.connected = false;
+        if(self.req) |*req| {
             if(req.connection) |conn| {
                 const stream = conn.stream_reader.getStream().handle;
                 std.posix.shutdown(stream, .recv) catch {};
             }
         }
-        if(self.event_listener_thread) |thread| { thread.join(); }
-        if(self.event_listener_req) |*req| { req.deinit(); }
+        if(self.thread) |thread| { thread.join(); }
+        if(self.req) |*req| { req.deinit(); }
 
-        self.event_listener_req = null;
-        self.event_listener_thread = null;
+        self.req = null;
+        self.thread = null;
     }
-
-    fn isListening(self: *Self) bool {
-        return self.listening.load(.acquire);
-    }
-
-    fn setIsListening(self: *Self, val: bool) void {
-        self.listening.store(val, .release);
-    }
-
-    /// Request a random photo from the server and download locally
-    pub fn downloadRandomPhoto(self: *Self) !void {
-        try self.deleteRandomPhoto();
-        const server_path = try std.fs.path.join(
-            self.allocator, 
-            &.{
-                self.server_url, 
-                ServerPaths.DOWNLOAD_RANDOM_PHOTO,
-            }
-        );
-        defer self.allocator.free(server_path);
-
-        const uri = try std.Uri.parse(server_path);
-
-        // Init server request
-        var req = try self.client.request(.GET, uri, .{});
-        defer req.deinit();
-
-        // Request random photo from server
-        req.sendBodiless() catch return error.NoPhotosAvailable; 
-        try self.log("Requested Random Photo From Server...\n", .{});
-
-        // Recieve headers and store in buffer
-        var redir_buf: [4096] u8 = undefined; 
-        var res = req.receiveHead(&redir_buf) catch return error.NoPhotosAvailable; 
-
-        if(res.head.status != .ok) return error.NoPhotosAvailable;
-
-        try self.log("File Headers Downloaded! Parsing...\n", .{});
-
-        // Create null placeholder for file extension 
-        var file_ext: ?[]const u8 = null;
-        var header_iter = res.head.iterateHeaders();
-
-        // Parse headers from server requenst, specifically 'Content-Type'
-        // available headers: Content-Type, X-File-Name, Date, Trasnfer-Encoding
-        // Content-Type values: 'image/jpeg', 'image/png'
-        while(header_iter.next()) |header| {
-            if(std.mem.eql(u8, header.name, "Content-Type")) {
-                if(std.mem.eql(u8, header.value, "image/jpeg")) {
-                    file_ext = ".jpg";
-                } else if(std.mem.eql(u8, header.value, "image/png")) {
-                    file_ext = ".png";
-                }
-            }
-        }
-       
-        if(file_ext == null) return error.NoContentTypeHeaderFound; 
-
-        // Read the body / contents /file bytes of
-        //  the data being send from server 
-        const body = try res.reader(&.{}).allocRemaining(self.allocator, .unlimited);
-        defer self.allocator.free(body);
-        
-        const file_path = try std.fmt.allocPrint(
-            self.allocator, 
-            "{s}{s}", 
-            .{"RandomPhoto", file_ext.?}
-        );
-        defer self.allocator.free(file_path);
-
-        // Create image file 
-        try self.log("Saving File: {s}...\n", .{file_path}); 
-        var img_file = try self.photo_dir.createFile(file_path, .{});
-        defer img_file.close();
-
-        var img_buf: [8192]u8 = undefined;
-        var file_writer = img_file.writer(&img_buf);
-        const fw = &file_writer.interface;
-
-        try fw.writeAll(body);
-        try fw.flush();
-
-        try self.log("File saved!\n\n", .{});
-    }
-
-    fn printR(self: *Self, comptime fmt: []const u8, args: anytype) !void {
-        const str = fmt ++ "\r";
-        try self.stdout.print("\x1B[2K\r", .{});
-        try self.stdout.print(str, args);
-        try self.stdout.flush();
-    }
-
-    fn deleteRandomPhoto(self: *Self) !void {
-        const exts = [_][]const u8{ ".jpg", ".jpeg", ".png", };
-
-        for(exts) |ext| {
-            var buf: [1024]u8 = undefined;
-            const path = try  std.fmt.bufPrint(&buf, "{s}{s}", .{self.photo_name, ext});
-
-            self.photo_dir.deleteFile(path) catch |err| switch(err) {
-                error.FileNotFound => {}, 
-                else => { return err; },
-            };
-        }
-    }
-
-};}
+};
+}

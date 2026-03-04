@@ -1,17 +1,30 @@
 const std = @import("std");
 const raylib = @import("raylib");
-const HttpClient = @import("HttpClient.zig").HttpClient;
-const PhotoHandler = @import("PhotoHandler.zig").PhotoHandler;
-const FULL_SCREEN = false;
+const Context = @import("Context.zig").Context;
 
+const Client = @import("ZigClient");
+const ZigClient = Client.ZigClient(Context);
+
+const FULL_SCREEN = false;
 var photo_available = true;
 var connected = true;
 
 pub fn main() !void {
-//     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-//     const allocator = gpa.allocator();
-//     defer _ = gpa.deinit();
-//
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
+
+    var ctx = Context.init(allocator);
+    defer ctx.deinit();
+
+    var client = ZigClient.init(allocator, &ctx);
+    defer client.deinit();
+
+    var listener = try client.newEventListener();
+    try initEvents(&listener);
+
+    try listener.startListening();
+    defer listener.stopListening();
 //     var args = std.process.args();
 //     defer args.deinit();
 //     _ = args.next();
@@ -27,18 +40,6 @@ pub fn main() !void {
 //     var photo_dir = try std.fs.cwd().openDir(photo_path, .{.iterate = true});
 //     defer photo_dir.close();
 //
-//     var stdout_buf: [4096]u8 = undefined;
-//     var stdout = std.fs.File.stdout().writer(&stdout_buf);
-//     const writer = &stdout.interface;
-//
-//     var client = HttpClient.init(.{
-//         .allocator = allocator,
-//         .server_url = server_url,
-//         .photo_name = photo_name,
-//         .photo_dir = &photo_dir,
-//         .stdout = writer,
-//     });
-//     defer client.deinit();
 //
 //     raylib.initWindow(800, 800, "Window");
 //     raylib.setTargetFPS(60);
@@ -56,42 +57,23 @@ pub fn main() !void {
 //     const shader = try raylib.loadShader(null, shader_path);
 //     const time_loc = raylib.getShaderLocation(shader, "time");
 //
-//     photo_available = true;
-//     connected = true;
-//     client.downloadRandomPhoto() catch |err| switch(err){
-//         error.NoPhotosAvailable => {
-//             photo_handler.texture = null;
-//             photo_available = false;
-//         },
-//         error.ConnectionRefused => {
-//             connected = false;
-//         },
-//         else => { return err; },
-//     };
 //
-//     if(photo_available) try photo_handler.loadNextTexture();
-//
-//     var timer = try std.time.Timer.start();
-//     while(!raylib.windowShouldClose()) {
-//         try runTimer(&timer, &client, &photo_handler);
-//
-//         raylib.beginDrawing(); 
-//         defer raylib.endDrawing();
-//
-//         raylib.clearBackground(.ray_white);
-//
-//         if(!connected) {
-//             const screen_width = raylib.getRenderWidth();
-//             //const screen_height = raylib.getScreenHeight();
-//             const text = "Not Connected To Server";
-//             const text_width = raylib.measureText(text, 32);
-//             const start_x = @divTrunc(screen_width, 2) 
-//                 - @divTrunc(text_width, 2);
-//
-//             raylib.drawText(text, start_x, 400, 32, .black);
-//             continue;
-//         }
-//
+    while(!raylib.windowShouldClose()) {
+
+        raylib.beginDrawing(); 
+        defer raylib.endDrawing();
+
+        raylib.clearBackground(.ray_white);
+
+        const screen_width = raylib.getRenderWidth();
+        //const screen_height = raylib.getScreenHeight();
+        const text = "Not Connected To Server";
+        const text_width = raylib.measureText(text, 32);
+        const start_x = @divTrunc(screen_width, 2) - @divTrunc(text_width, 2);
+
+        raylib.drawText(text, start_x, 400, 32, .black);
+    }
+}
 //         const time: f32 = @floatCast(raylib.getTime());
 //         raylib.setShaderValue(shader, time_loc, &time, .float);
 //
@@ -131,35 +113,26 @@ pub fn main() !void {
 //         }
 //     }
 // }
-//
-// fn runTimer(timer: *std.time.Timer, client: *HttpClient, photo_handler: *PhotoHandler) !void {
-//     const elapsed = timer.read();
-//
-//     if(elapsed >= (3 * std.time.ns_per_s)) {
-//         timer.reset();
-//         var caught_err = false; 
-//
-//         connected = true;
-//         photo_available = true;
-//
-//         client.downloadRandomPhoto() catch |err| switch(err){
-//             error.ConnectionRefused => {
-//                 connected = false;
-//                 caught_err = true;
-//             },
-//             error.NoPhotosAvailable => {
-//                 photo_handler.texture = null;
-//                 client.resetClient();
-//                 photo_available = false;
-//
-//                 caught_err = true;
-//             }, 
-//             else => {return err;},
-//         };
-//
-//         if(caught_err) return;
-//
-//         try photo_handler.loadNextTexture();
-//     }
-}
+fn initEvents(listener: *Client.EventListener) !void {
+    try listener.newEvent(
+        "data::photos_available",
+        struct {
+            fn onevent(event: *ZigClient.Event) !void {
+                event.ctx.mutex.lock();
+                defer event.ctx.mutex.unlock();
+                event.ctx.photos_available = true;
+            }
+        }.onevent,
+    );
 
+    try listener.newEvent(
+        "data::no_photos_available",
+        struct {
+            fn onevent(event: *ZigClient.Event) !void {
+                event.ctx.mutex.lock();
+                defer event.ctx.mutex.unlock();
+                event.ctx.photos_available = false;
+            }
+        }.onevent,
+    );
+}

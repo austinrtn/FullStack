@@ -58,34 +58,14 @@ pub fn build(b: *std.Build) void {
         phaseCmd.addArgs(args);
     }
 
-
-    const backend_exe = b.addExecutable(.{
-        .name = "backend",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/backend.zig"),
-            .target = target,
-            .optimize = optimize, 
-            .imports = &.{}
-        }),
-
+    const zigclient_dep = b.dependency("ZigClient", .{
+        .target = target,
+        .optimize = optimize,
     });
+    const zigclient_mod = zigclient_dep.module("ZigClient");
 
-    b.installArtifact(backend_exe);
-
-    const backend_step = b.step("backend", "Run app");
-    const backend_cmd = b.addRunArtifact(backend_exe);
-
-    backend_step.dependOn(&backend_cmd.step);
-    backend_cmd.step.dependOn(b.getInstallStep());
-
-    backend_cmd.addArg(b.pathFromRoot("."));
-    backend_cmd.addArg(SERVER);
-    backend_cmd.addArg(PHOTO_NAME);
-    backend_cmd.addArg(PHOTO_DIR);
-
-    if(b.args) |args| {
-        backend_cmd.addArgs(args);
-    }
+    // then when creating your exe/module:
+    exe.root_module.addImport("ZigClient", zigclient_mod);
 
     //RAYLIB
     const raylib_dep = b.dependency("raylib_zig", .{

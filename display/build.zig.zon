@@ -6,6 +6,10 @@
             .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#cd71c85d571027ac8033357f83b124ee051825b3",
             .hash = "raylib_zig-5.6.0-dev-KE8REENOBQC-m5nK7M2b5aKSIubJPbPLUYcRhT7aT3RN",
         },
+        .ZigClient = .{
+            .url = "https://github.com/austinrtn/ZigClient/archive/refs/tags/v0.1.0.tar.gz",
+            .hash = "ZigClient-0.0.0-9T_OzdlKAAB8qnfnqC2hwOfQ15JTiuLw2c3n2wzthJGo",
+        },
     },
     .minimum_zig_version = "0.15.2",
     .paths = .{""},

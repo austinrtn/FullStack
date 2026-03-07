@@ -7,13 +7,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const mod = b.addModule("Display", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+    });
+
     const exe = b.addExecutable(.{
         .name = "display",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize, 
-            .imports = &.{}
+            .imports = &.{
+                .{ .name = "Display", .module = mod },
+            },
         }),
 
     });
@@ -63,6 +70,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const zigclient_mod = zigclient_dep.module("ZigClient");
+    mod.addImport("ZigClient", zigclient_mod);
 
     // then when creating your exe/module:
     exe.root_module.addImport("ZigClient", zigclient_mod);

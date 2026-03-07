@@ -1,10 +1,13 @@
 const std = @import("std");
 const raylib = @import("raylib");
-const Context = @import("Context.zig").Context;
+const Display = @import("Display");
+const Context = Display.Context;
 
 const Client = @import("ZigClient");
 const ZigClient = Client.ZigClient(Context);
+const PhotoManager = Display.PhotoManager;
 
+const url = "http://localhost:3000/";
 const FULL_SCREEN = false;
 var photo_available = true;
 var connected = true;
@@ -21,33 +24,27 @@ pub fn main() !void {
     defer client.deinit();
 
     var listener = try client.newEventListener();
-    try initEvents(&listener);
+    try initEvents(listener);
 
-    try listener.startListening();
+    try listener.startListening(url ++ "events?category=DISPLAY");
     defer listener.stopListening();
-//     var args = std.process.args();
-//     defer args.deinit();
-//     _ = args.next();
-//
-//     const root_path = args.next() orelse return error.NoRootPath;
-//     const server_url = args.next() orelse return error.NoServerURL;
-//     const photo_name = args.next() orelse return error.NoPhotoName;
-//     const photo_dir_name = args.next() orelse return error.NoPhotoDir;
-//
-//     const photo_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{root_path, photo_dir_name});
-//     defer allocator.free(photo_path);
-//
-//     var photo_dir = try std.fs.cwd().openDir(photo_path, .{.iterate = true});
-//     defer photo_dir.close();
-//
-//
-//     raylib.initWindow(800, 800, "Window");
-//     raylib.setTargetFPS(60);
-//     if(FULL_SCREEN) raylib.toggleFullscreen();
-//     defer{
-//         if(raylib.isWindowFullscreen()) raylib.toggleFullscreen();
-//         raylib.closeWindow(); 
-//     }    
+
+    var photo_manager = PhotoManager.init(.{
+        .allocator = allocator,
+        .url = "localhost:3000",
+        .client = &client,
+        .photo_dir = "photos",
+    });
+    defer photo_manager.deinit();
+    try photo_manager.getNextPhoto();
+    
+    raylib.initWindow(800, 800, "Window");
+    raylib.setTargetFPS(60);
+    if(FULL_SCREEN) raylib.toggleFullscreen();
+    defer{
+        if(raylib.isWindowFullscreen()) raylib.toggleFullscreen();
+        raylib.closeWindow(); 
+    }    
 //
 //     var photo_handler = PhotoHandler.init(.{.allocator = allocator, .photo_dir = &photo_dir, .photo_dir_path = photo_path});
 //     defer photo_handler.deinit();
@@ -113,7 +110,9 @@ pub fn main() !void {
 //         }
 //     }
 // }
-fn initEvents(listener: *Client.EventListener) !void {
+//
+//
+fn initEvents(listener: *ZigClient.Listener) !void {
     try listener.newEvent(
         "data::photos_available",
         struct {

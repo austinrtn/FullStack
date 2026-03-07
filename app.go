@@ -132,6 +132,7 @@ func main() {
 
 func test(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "json")
+	res.Header().Set("Test-Header", "Header Recived!")
 	
 	type Test struct {
 		Msg string `json:"msg"`
@@ -166,7 +167,7 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	appState.Clients[ch] = Client{Category: category}
 	appState.Mu.Unlock()
 
-	fmt.Printf("%s\n\n", category)
+	fmt.Printf("cat: %s\n", categoryStr)
 
 	defer func() {
 		appState.Mu.Lock()

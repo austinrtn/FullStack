@@ -7,7 +7,7 @@ pub const Context = struct {
     mutex: std.Thread.Mutex = .{},
 
     stdout_buf: [4096]u8 = undefined,
-    stdout: *std.io.Writer,
+    stdout: std.fs.File.Writer,
     photos_available: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) @This() {

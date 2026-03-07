@@ -1,0 +1,66 @@
+const std = @import("std");
+const Display = @import("Display");
+const Context = Display.Context;
+const ZigClient = @import("ZigClient").ZigClient(Context);
+
+pub const PhotoManager = struct {
+    const Self = @This();
+
+    const Config = struct {
+        allocator: std.mem.Allocator,
+        client: *ZigClient,
+
+        url: []const u8,
+        photo_dir: []const u8,
+        max_queue_len: usize = 5,
+    };
+
+
+    allocator: std.mem.Allocator, 
+    client: *ZigClient,
+
+    url: []const u8,
+    photo_dir: []const u8,
+    max_queue_len: usize,  
+    photo_queue: std.ArrayList([]const u8) = .{},
+
+    photo_index: usize = 0,
+
+    pub fn init(config: Config) Self {
+        const self = Self{
+            .allocator = config.allocator,
+            .client = config.client,
+            .max_queue_len = config.max_queue_len,
+        };
+        return self;
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.photo_queue.deinit(self.allocator);
+    }
+
+    pub fn getNextPhoto(self: *Self) !void {
+        const url = try self.getUrl(.getNextPhoto, "index", idx);
+   //     var res = self.client.get(url: []const u8, req_options: RequestOptions)     
+    }
+};
+
+const ServerPath = struct {
+    url: []const u8,
+    path: []const u8, 
+    query: ?[]const u8,
+    allocator: std.mem.Allocator,
+
+    fn get(self: *@This()) ![]const u8 {
+        if(self.query) |qry| { return try std.fmt.allocPrint(self.allocator, "{s}/{s}?{s}=", .{self.url, self.path, qry}); }
+        else { return try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{self.url, self.path}); }
+    }
+};
+
+const ServerPaths = struct {
+    allocator: std.mem.Allocator,
+    
+    fn getServerPath(self) ![]const u8 {
+
+    }
+};

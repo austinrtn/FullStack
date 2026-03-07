@@ -13,6 +13,7 @@ pub const PhotoManager = struct {
         url: []const u8,
         photo_dir: []const u8,
         max_queue_len: usize = 5,
+        ctx: *Context,
     };
 
     allocator: std.mem.Allocator, 
@@ -22,8 +23,8 @@ pub const PhotoManager = struct {
     photo_dir: []const u8,
     max_queue_len: usize,  
     photo_queue: std.ArrayList([]const u8) = .{},
-
     photo_index: usize = 0,
+    ctx: *Context,
 
     pub fn init(config: Config) Self {
         const self = Self{
@@ -32,6 +33,7 @@ pub const PhotoManager = struct {
             .max_queue_len = config.max_queue_len,
             .url = config.url,  
             .photo_dir = config.photo_dir,
+            .ctx = config.ctx,
         };
         return self;
     }
@@ -41,11 +43,18 @@ pub const PhotoManager = struct {
     }
 
     pub fn getNextPhoto(self: *Self) !void {
-        //var buf: []u8 = undefined;
-        const url = try self.getUrl("getNextPhoto", "index");
-        defer self.allocator.free(url);
+        const ctx = self.ctx;
 
-        std.debug.print("{s}\n", .{url});
+        if(!ctx.isConnected()) {
+            return error.NotConnected;
+        }
+
+        // const url = try self.getUrl("getNextPhoto", "index");
+        // defer self.allocator.free(url);
+        //
+        // var res = try self.client.get(url, .{});
+        // defer res.deinit();
+
     }
 
     fn getUrl(self: *Self, path: []const u8, query: ?[]const u8) ![]const u8{

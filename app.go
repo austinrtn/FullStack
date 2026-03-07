@@ -167,7 +167,7 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	appState.Clients[ch] = Client{Category: category}
 	appState.Mu.Unlock()
 
-	fmt.Printf("cat: %s\n", categoryStr)
+	fmt.Println("New connection established...")
 
 	defer func() {
 		appState.Mu.Lock()
@@ -224,7 +224,7 @@ func broadcastLocked(appState *AppState, clientCategory ClientCategory, msg Broa
 }
 
 /// Sends list of photofile paths to client to load into HTML 
-func getPhotos(appState *AppState, res http.ResponseWriter, req *http.Request) {
+func getPhotos(appState *AppState, res http.ResponseWriter, _ *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	res.Header().Set("Cache-Control", "no-cache")
 	
@@ -300,7 +300,7 @@ func deletePhoto(appState *AppState, res http.ResponseWriter, req *http.Request)
 	updateAppState(appState, dir)
 }
 
-func getRandomPhoto(appState *AppState, res http.ResponseWriter, req *http.Request) {
+func getRandomPhoto(appState *AppState, res http.ResponseWriter, _ *http.Request) {
 	dir, ok := openDir(res, appState.PhotoDirName)
 	if !ok { return }
 

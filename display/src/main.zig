@@ -1,6 +1,5 @@
 const std = @import("std");
-const raylib = @import("raylib");
-const Display = @import("Display");
+const raylib = @import("raylib"); const Display = @import("Display");
 const Context = Display.Context;
 
 const Client = @import("ZigClient");
@@ -34,8 +33,10 @@ pub fn main() !void {
         .url = "localhost:3000",
         .client = &client,
         .photo_dir = "photos",
+        .ctx = &ctx,
     });
     defer photo_manager.deinit();
+
     try photo_manager.getNextPhoto();
     
     raylib.initWindow(800, 800, "Window");
@@ -45,9 +46,6 @@ pub fn main() !void {
         if(raylib.isWindowFullscreen()) raylib.toggleFullscreen();
         raylib.closeWindow(); 
     }    
-//
-//     var photo_handler = PhotoHandler.init(.{.allocator = allocator, .photo_dir = &photo_dir, .photo_dir_path = photo_path});
-//     defer photo_handler.deinit();
 //
 //     var buf: [1024]u8 = undefined;
 //     const shader_path = try std.fmt.bufPrintZ(&buf, "{s}/src/shaders/{s}", .{root_path, "Wave.frag"});
@@ -114,7 +112,20 @@ pub fn main() !void {
 //
 fn initEvents(listener: *ZigClient.Listener) !void {
     try listener.newEvent(
+        "data::connection_established",
+        true,
+        struct {
+            fn onevent(event: *ZigClient.Event) !void {
+                event.ctx.mutex.lock();
+                defer event.ctx.mutex.unlock();
+                event.ctx.setConnected(true);
+            }
+        }.onevent,
+    );
+
+    try listener.newEvent(
         "data::photos_available",
+        false,
         struct {
             fn onevent(event: *ZigClient.Event) !void {
                 event.ctx.mutex.lock();
@@ -126,6 +137,7 @@ fn initEvents(listener: *ZigClient.Listener) !void {
 
     try listener.newEvent(
         "data::no_photos_available",
+        false,
         struct {
             fn onevent(event: *ZigClient.Event) !void {
                 event.ctx.mutex.lock();

@@ -8,7 +8,7 @@
         },
         .ZigClient = .{
             .url = "https://github.com/austinrtn/ZigClient/archive/refs/tags/v0.1.1.tar.gz",
-            .hash = "ZigClient-0.0.0-9T_OzZNMAAC_xgmCYXMhWeLIHDwVCNyHcm3W9rwcHNtC",
+            .hash = "ZigClient-0.0.0-9T_OzVdQAAB8wKxSs8GSZxFcvhwgjKrfLFcYKOcboRfZ",
         },
     },
     .minimum_zig_version = "0.15.2",

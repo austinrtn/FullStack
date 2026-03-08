@@ -1,11 +1,10 @@
 const std = @import("std");
 const raylib = @import("raylib"); 
-const Display = @import("Display");
-const Context = Display.Context;
-
 const Client = @import("ZigClient");
 const ZigClient = Client.ZigClient(Context);
-const PhotoManager = Display.PhotoManager;
+
+const Context = @import("./Context.zig").Context;
+const PhotoManager = @import("./PhotoManager.zig").PhotoManager;
 const PhotoViewer = @import("./PhotoViewer.zig").PhotoViewer;
 
 const url = "http://localhost:3000/";
@@ -39,6 +38,13 @@ pub fn main() !void {
     });
     defer photo_manager.deinit();
 
+    var photo_viewer = try PhotoViewer.init(.{
+        .allocator = allocator, 
+    });
+    defer photo_viewer.deinit();
+
+    //try photo_viewer.loop();
+
     //var attempting = false;
     // while(true) {
     //     if(!attempting) std.debug.print("Downloading Photo {}/7\n", .{photo_manager.photo_index});
@@ -54,14 +60,6 @@ pub fn main() !void {
     // }
 
     if(true) return;
-    
-    raylib.initWindow(800, 800, "Window");
-    raylib.setTargetFPS(60);
-    if(FULL_SCREEN) raylib.toggleFullscreen();
-    defer{
-        if(raylib.isWindowFullscreen()) raylib.toggleFullscreen();
-        raylib.closeWindow(); 
-    }    
 //
 //     var buf: [1024]u8 = undefined;
 //     const shader_path = try std.fmt.bufPrintZ(&buf, "{s}/src/shaders/{s}", .{root_path, "Wave.frag"});

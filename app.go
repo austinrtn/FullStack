@@ -32,6 +32,18 @@ const (
 	NoPhotosAvailable BroadcastMsg = "no_photos_available"
 )
 
+type ErrorHeaderMsg string 
+const (
+	InvalidIndex ErrorHeaderMsg = "invalid_index"
+	IndexOverflow ErrorHeaderMsg = "index_overflow"
+	UnableToReadFile ErrorHeaderMsg = "unable_to_read_file"
+)
+
+func sendErrorHeader(res http.ResponseWriter, msg ErrorHeaderMsg) {
+	headerName := "X-Error-Code"
+	res.Header().Set(headerName, string(msg))
+}
+
 type Client struct {
 	//struct categories: 'ui', 'display'
 	Category ClientCategory
@@ -168,7 +180,7 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	appState.Mu.Lock()
 	appState.Clients[ch] = Client{Category: category}
 	appState.Mu.Unlock()
-	fmt.Println()
+
 	fmt.Println("New connection established...")
 
 	defer func() {
@@ -314,25 +326,27 @@ func getNextPhoto(appState *AppState, res http.ResponseWriter, req *http.Request
 	}
 
 	fileIdxStr := req.URL.Query().Get("idx")
-	fileIdx,err := strconv.Atoi(fileIdxStr)
+	fileIdx, err := strconv.Atoi(fileIdxStr)
+	overflow := false
 
 	if err != nil {
-		res.Header().Set("X-Error-Code", "invalid_index")
+		sendErrorHeader(res, InvalidIndex)
 		http.Error(res, "Invalid Index", http.StatusBadRequest)
 		return 
-	}	
-
-	if fileIdx < 0 {
-		res.Header().Set("X-Error-Code", "negative_index")
-		http.Error(res, "Invalid Index", http.StatusNotFound)
+	} else if fileIdx < 0 {
+		sendErrorHeader(res, InvalidIndex)
+		http.Error(res, "Index is negative", http.StatusBadRequest)
 		return 
+	} else if fileIdx >= len(dir) {
+		overflow = true
+		sendErrorHeader(res, IndexOverflow)
 	}
 
 	var file os.DirEntry
 
-	if fileIdx <= len(dir)  {
+	if !overflow  {
 		file = dir[fileIdx]
-	} else if fileIdx > len(dir) {
+	} else {
 		file = dir[0]
 	}
 
@@ -349,8 +363,6 @@ func getNextPhoto(appState *AppState, res http.ResponseWriter, req *http.Request
 		http.Error(res, "Was unable to read requested file", http.StatusInternalServerError)
 		return 
 	}
-
-		res.Header().Set("X-Error-Code", "none")
 
 	res.Write(fileData)
 }
@@ -385,6 +397,7 @@ func getRandomPhoto(appState *AppState, res http.ResponseWriter, _ *http.Request
 	fileData, err := os.ReadFile(filePath)
 
 	if err != nil {
+		sendErrorHeader(res, UnableToReadFile)
 		http.Error(res, "Was unable to read requested file", http.StatusInternalServerError)
 		return 
 	}

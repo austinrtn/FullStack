@@ -5,6 +5,7 @@ const ZigClient = @import("ZigClient").ZigClient(Context);
 
 pub const PhotoManager = struct {
     const Self = @This();
+    const ErrorCode = enum{ invalid_index, index_overflow, other };
 
     const Config = struct {
         allocator: std.mem.Allocator,
@@ -21,8 +22,7 @@ pub const PhotoManager = struct {
 
     url: []const u8,
     photo_dir: []const u8,
-    max_queue_len: usize,  
-    photo_queue: std.ArrayList([]const u8) = .{},
+
     photo_index: usize = 0,
     ctx: *Context,
 
@@ -30,7 +30,6 @@ pub const PhotoManager = struct {
         const self = Self{
             .allocator = config.allocator,
             .client = config.client,
-            .max_queue_len = config.max_queue_len,
             .url = config.url,  
             .photo_dir = config.photo_dir,
             .ctx = config.ctx,
@@ -39,7 +38,7 @@ pub const PhotoManager = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.photo_queue.deinit(self.allocator);
+        _ = self;
     }
 
     pub fn getNextPhoto(self: *Self) !void {
@@ -48,23 +47,30 @@ pub const PhotoManager = struct {
             return error.NotConnected;
         }
 
-        const url = try self.getUrl("getNextPhoto", "idx");
+        const url_base = try self.getUrl("getNextPhoto", "idx");
+        defer self.allocator.free(url_base);
+
+        const url = try std.fmt.allocPrint(self.allocator, "{s}{}", .{url_base, self.photo_index});
         defer self.allocator.free(url);
 
         var res = try self.client.get(url, .{});
         defer res.deinit();
 
-        if(res.status == .bad_request) {
-            const ErrorCode = enum{invalid_index, negative_index};
-            const error_code = res.getHeader("X-Error-Code") orelse return error.BadRequest;
-
-            const err = std.meta.stringToEnum(ErrorCode, error_code) orelse return error.BadRequest;
+        const error_code = res.getHeader("X-Error-Code") orelse null;
+        if(error_code) |err_code| {
+            const err = std.meta.stringToEnum(ErrorCode, err_code) orelse .other;
             switch(err) {
                 .invalid_index => return error.InvalidIndex,
-                .negative_index => return error.NegativeIndex,
+                .index_overflow => {
+                    self.photo_index = 0;
+                },
+                .other => {
+                    std.debug.print("HTTP Error: {s} | Msg: {s}\n", .{ @tagName(res.status), err_code});
+                    return error.BadRequest; 
+                },
             } 
         }
-
+         
         var photos = try std.fs.cwd().openDir("./photos", .{});
         defer photos.close();
         const file_name = res.getHeader("X-File-Name") orelse return error.NoFileName;
@@ -77,6 +83,8 @@ pub const PhotoManager = struct {
         
         try w.print("{s}", .{res.body});
         try w.flush();
+
+        self.photo_index += 1;
     }
 
     fn getUrl(self: *Self, path: []const u8, query: ?[]const u8) ![]const u8{

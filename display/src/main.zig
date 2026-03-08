@@ -36,12 +36,20 @@ pub fn main() !void {
         .ctx = &ctx,
     });
     defer photo_manager.deinit();
+
+    var attempting = false;
     while(true) {
+        if(!attempting) std.debug.print("Downloading Photo {}/7\n", .{photo_manager.photo_index});
         photo_manager.getNextPhoto() catch |err| switch(err){
-            error.NotConnected =>  continue,
+            error.NotConnected => {
+                attempting = true;
+                continue;
+            },
             else => return err,
         };
-        break;
+        attempting = false;
+        std.debug.print("Photo Downloaded!\n", .{});
+        std.Thread.sleep(std.time.ns_per_s * 0.5);
     }
 
     if(true) return;

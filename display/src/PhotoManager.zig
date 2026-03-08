@@ -44,17 +44,39 @@ pub const PhotoManager = struct {
 
     pub fn getNextPhoto(self: *Self) !void {
         const ctx = self.ctx;
-
         if(!ctx.isConnected()) {
             return error.NotConnected;
         }
 
-        // const url = try self.getUrl("getNextPhoto", "index");
-        // defer self.allocator.free(url);
-        //
-        // var res = try self.client.get(url, .{});
-        // defer res.deinit();
+        const url = try self.getUrl("getNextPhoto", "idx");
+        defer self.allocator.free(url);
 
+        var res = try self.client.get(url, .{});
+        defer res.deinit();
+
+        if(res.status == .bad_request) {
+            const ErrorCode = enum{invalid_index, negative_index};
+            const error_code = res.getHeader("X-Error-Code") orelse return error.BadRequest;
+
+            const err = std.meta.stringToEnum(ErrorCode, error_code) orelse return error.BadRequest;
+            switch(err) {
+                .invalid_index => return error.InvalidIndex,
+                .negative_index => return error.NegativeIndex,
+            } 
+        }
+
+        var photos = try std.fs.cwd().openDir("./photos", .{});
+        defer photos.close();
+        const file_name = res.getHeader("X-File-Name") orelse return error.NoFileName;
+        
+        var pic_buf: [4096]u8 = undefined;
+        var pic_file = try photos.createFile(file_name, .{});
+        defer pic_file.close();
+        var pic_writer = pic_file.writer(&pic_buf);
+        const w = &pic_writer.interface;
+        
+        try w.print("{s}", .{res.body});
+        try w.flush();
     }
 
     fn getUrl(self: *Self, path: []const u8, query: ?[]const u8) ![]const u8{

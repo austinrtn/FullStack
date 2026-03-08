@@ -30,14 +30,21 @@ pub fn main() !void {
 
     var photo_manager = PhotoManager.init(.{
         .allocator = allocator,
-        .url = "localhost:3000",
+        .url = url,
         .client = &client,
         .photo_dir = "photos",
         .ctx = &ctx,
     });
     defer photo_manager.deinit();
+    while(true) {
+        photo_manager.getNextPhoto() catch |err| switch(err){
+            error.NotConnected =>  continue,
+            else => return err,
+        };
+        break;
+    }
 
-    try photo_manager.getNextPhoto();
+    if(true) return;
     
     raylib.initWindow(800, 800, "Window");
     raylib.setTargetFPS(60);

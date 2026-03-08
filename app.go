@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -120,6 +121,7 @@ func main() {
 	http.HandleFunc("/getPhotos", func(res http.ResponseWriter, req *http.Request) { getPhotos(appState, res, req) })
 	http.HandleFunc("/savePhoto", func(res http.ResponseWriter, req *http.Request) { savePhoto(appState, res, req) })
 	http.HandleFunc("/deletePhoto", func(res http.ResponseWriter, req *http.Request) { deletePhoto(appState, res, req) })
+	http.HandleFunc("/getNextPhoto",func(res http.ResponseWriter, req *http.Request) { getNextPhoto(appState, res, req) })
 	http.HandleFunc("/getRandomPhoto",func(res http.ResponseWriter, req *http.Request) { getRandomPhoto(appState, res, req) })
 	http.HandleFunc("/test", test);
 
@@ -166,7 +168,7 @@ func sseHandler(appState *AppState, res http.ResponseWriter, req *http.Request) 
 	appState.Mu.Lock()
 	appState.Clients[ch] = Client{Category: category}
 	appState.Mu.Unlock()
-
+	fmt.Println()
 	fmt.Println("New connection established...")
 
 	defer func() {
@@ -300,6 +302,59 @@ func deletePhoto(appState *AppState, res http.ResponseWriter, req *http.Request)
 	updateAppState(appState, dir)
 }
 
+func getNextPhoto(appState *AppState, res http.ResponseWriter, req *http.Request) {
+	dir, ok := openDir(res, appState.PhotoDirName)
+	if !ok { return }
+
+	updateAppState(appState, dir)
+
+	if !appState.PhotosAvailable {
+		http.Error(res, "No photos available", http.StatusNotFound)
+		return 
+	}
+
+	fileIdxStr := req.URL.Query().Get("idx")
+	fileIdx,err := strconv.Atoi(fileIdxStr)
+
+	if err != nil {
+		res.Header().Set("X-Error-Code", "invalid_index")
+		http.Error(res, "Invalid Index", http.StatusBadRequest)
+		return 
+	}	
+
+	if fileIdx < 0 {
+		res.Header().Set("X-Error-Code", "negative_index")
+		http.Error(res, "Invalid Index", http.StatusNotFound)
+		return 
+	}
+
+	var file os.DirEntry
+
+	if fileIdx <= len(dir)  {
+		file = dir[fileIdx]
+	} else if fileIdx > len(dir) {
+		file = dir[0]
+	}
+
+	filePath := filepath.Join("photos", file.Name())
+	fileExt := filepath.Ext(filePath)
+
+	res.Header().Set("Content-Type", mime.TypeByExtension(fileExt))
+	res.Header().Set("X-File-Name", file.Name())
+
+	fileData, err := os.ReadFile(filePath)
+
+	if err != nil {
+		res.Header().Set("X-Error-Code", "unable_to_read_file")
+		http.Error(res, "Was unable to read requested file", http.StatusInternalServerError)
+		return 
+	}
+
+		res.Header().Set("X-Error-Code", "none")
+
+	res.Write(fileData)
+}
+
 func getRandomPhoto(appState *AppState, res http.ResponseWriter, _ *http.Request) {
 	dir, ok := openDir(res, appState.PhotoDirName)
 	if !ok { return }
@@ -307,7 +362,7 @@ func getRandomPhoto(appState *AppState, res http.ResponseWriter, _ *http.Request
 	updateAppState(appState, dir)
 
 	if !appState.PhotosAvailable {
-		http.Error(res, "No photos photos_available", http.StatusNotFound)
+		http.Error(res, "No photos available", http.StatusNotFound)
 		return 
 	}
 			

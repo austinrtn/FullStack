@@ -1,15 +1,15 @@
 const std = @import("std");
 
 pub const Context = struct {
+    const Self = @This();
     impl: struct {
         arena: std.heap.ArenaAllocator,
         connection_established: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+        photos_available: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     },
-    mutex: std.Thread.Mutex = .{},
     stdout: Stdout,
-    photos_available: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator) @This() {
+    pub fn init(allocator: std.mem.Allocator) Self {
         return .{
             .impl = .{
                 .arena = std.heap.ArenaAllocator.init(allocator),
@@ -18,11 +18,11 @@ pub const Context = struct {
         };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *Self) void {
         self.impl.arena.deinit();
     }
 
-    pub fn copyVal(self: *@This(), comptime field_name: []const u8, val: anytype) !void {
+    pub fn copyVal(self: *Self, comptime field_name: []const u8, val: anytype) !void {
         const field_ref = &@field(self, field_name);
         const FieldType = @TypeOf(field_ref.*);
 
@@ -30,12 +30,20 @@ pub const Context = struct {
         field_ref.* = try self.impl.arena.allocator().dupe(std.meta.Child(FieldType), val);
     }
 
-    pub fn isConnected(self: *@This()) bool {
+    pub fn isConnected(self: *Self) bool {
         return self.impl.connection_established.load(.acquire);
     }
 
-    pub fn setConnected(self: *@This(), connection_established: bool) void {
+    pub fn setConnected(self: *Self, connection_established: bool) void {
         self.impl.connection_established.store(connection_established, .release);
+    }
+
+    pub fn isPhotosAvailable(self: *Self) bool {
+        return self.impl.photos_available.load(.acquire);
+    }
+
+    pub fn setPhotosAvailable(self: *Self, photos_available: bool) void {
+        self.impl.photos_available.store(photos_available,.release);
     }
 
 };

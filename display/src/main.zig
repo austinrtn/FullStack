@@ -1,10 +1,12 @@
 const std = @import("std");
-const raylib = @import("raylib"); const Display = @import("Display");
+const raylib = @import("raylib"); 
+const Display = @import("Display");
 const Context = Display.Context;
 
 const Client = @import("ZigClient");
 const ZigClient = Client.ZigClient(Context);
 const PhotoManager = Display.PhotoManager;
+const PhotoViewer = @import("./PhotoViewer.zig").PhotoViewer;
 
 const url = "http://localhost:3000/";
 const FULL_SCREEN = false;
@@ -37,20 +39,19 @@ pub fn main() !void {
     });
     defer photo_manager.deinit();
 
-    var attempting = false;
-    while(true) {
-        if(!attempting) std.debug.print("Downloading Photo {}/7\n", .{photo_manager.photo_index});
-        photo_manager.getNextPhoto() catch |err| switch(err){
-            error.NotConnected => {
-                attempting = true;
-                continue;
-            },
-            else => return err,
-        };
-        attempting = false;
-        std.debug.print("Photo Downloaded!\n", .{});
-        std.Thread.sleep(std.time.ns_per_s * 0.5);
-    }
+    //var attempting = false;
+    // while(true) {
+    //     if(!attempting) std.debug.print("Downloading Photo {}/7\n", .{photo_manager.photo_index});
+    //     photo_manager.getNextPhoto() catch |err| switch(err){
+    //         error.NotConnected => {
+    //             attempting = true;
+    //             continue;
+    //         },
+    //         else => return err,
+    //     };
+    //
+    //     break;
+    // }
 
     if(true) return;
     
@@ -131,8 +132,6 @@ fn initEvents(listener: *ZigClient.Listener) !void {
         true,
         struct {
             fn onevent(event: *ZigClient.Event) !void {
-                event.ctx.mutex.lock();
-                defer event.ctx.mutex.unlock();
                 event.ctx.setConnected(true);
             }
         }.onevent,
@@ -143,9 +142,7 @@ fn initEvents(listener: *ZigClient.Listener) !void {
         false,
         struct {
             fn onevent(event: *ZigClient.Event) !void {
-                event.ctx.mutex.lock();
-                defer event.ctx.mutex.unlock();
-                event.ctx.photos_available = true;
+                event.ctx.setPhotosAvailable(true);
             }
         }.onevent,
     );
@@ -155,9 +152,7 @@ fn initEvents(listener: *ZigClient.Listener) !void {
         false,
         struct {
             fn onevent(event: *ZigClient.Event) !void {
-                event.ctx.mutex.lock();
-                defer event.ctx.mutex.unlock();
-                event.ctx.photos_available = false;
+                event.ctx.setPhotosAvailable(false);
             }
         }.onevent,
     );

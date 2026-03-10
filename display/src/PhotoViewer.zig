@@ -29,6 +29,7 @@ pub const PhotoViewer = struct {
     fps: i32 = 60,
 
     impl: PhotoCtx = .{},
+    do: bool = false,
 
     pub fn init(config: Config) !Self {
         var self = Self{
@@ -59,18 +60,25 @@ pub const PhotoViewer = struct {
     }
 
     pub fn loop(self: *Self) !void {
-        // var thread = try std.Thread.spawn(
-        //     .{.allocator = self.allocator}, 
-        //     manageFiles,
-        //     .{}
-        // );
+        self.do = true;
+        var thread = try std.Thread.spawn(
+            .{.allocator = self.allocator}, 
+            updateFiles,
+            .{self}
+        );
+
         while(!raylib.windowShouldClose()) {
             self.render();
         }
+
+        self.do = false;
+        thread.join();
     } 
 
-    pub fn manageFiles() !void {
+    pub fn updateFiles(self: *Self) !void {
+        while(self.updating_files) {
 
+        }
     }
 
     pub fn render(self: *Self) void {
@@ -118,13 +126,13 @@ pub const PhotoViewer = struct {
 
     fn drawNoImgText(_: *Self) void {
         const screen_width = raylib.getRenderWidth();
-        //const screen_height = raylib.getScreenHeight();
+        const screen_height = @divTrunc(raylib.getRenderHeight(), 2);
         const text = "No pictures loaded";
         const text_width = raylib.measureText(text, 32);
         const start_x = @divTrunc(screen_width, 2) 
             - @divTrunc(text_width, 2);
 
-        raylib.drawText(text, start_x, 400, 32, .black);
+        raylib.drawText(text, start_x, screen_height, 32, .black);
     }
 
     pub fn getTextureSize(self: *Self) !struct {

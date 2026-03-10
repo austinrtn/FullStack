@@ -43,7 +43,8 @@ pub fn main() !void {
     });
     defer photo_viewer.deinit();
 
-    //try photo_viewer.loop();
+    photo_viewer.initWindow();
+    try photo_viewer.loop();
 
     //var attempting = false;
     // while(true) {

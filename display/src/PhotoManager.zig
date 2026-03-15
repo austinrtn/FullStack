@@ -13,7 +13,7 @@ pub const PhotoManager = struct {
 
         url: []const u8,
         photo_dir: []const u8,
-        max_queue_len: usize = 5,
+        max_dir_len: usize = 5,
         ctx: *Context,
     };
 
@@ -22,6 +22,7 @@ pub const PhotoManager = struct {
 
     url: []const u8,
     photo_dir: []const u8,
+    max_dir_len: usize, 
 
     photo_index: usize = 0,
     ctx: *Context,
@@ -33,6 +34,7 @@ pub const PhotoManager = struct {
             .url = config.url,  
             .photo_dir = config.photo_dir,
             .ctx = config.ctx,
+            .max_dir_len = config.max_dir_len,
         };
         return self;
     }
@@ -61,9 +63,7 @@ pub const PhotoManager = struct {
             const err = std.meta.stringToEnum(ErrorCode, err_code) orelse .other;
             switch(err) {
                 .invalid_index => return error.InvalidIndex,
-                .index_overflow => {
-                    self.photo_index = 0;
-                },
+                .index_overflow => { return error.IndexOverflow; },
                 .other => {
                     std.debug.print("HTTP Error: {s} | Msg: {s}\n", .{ @tagName(res.status), err_code});
                     return error.BadRequest; 
@@ -85,6 +85,18 @@ pub const PhotoManager = struct {
         try w.flush();
 
         self.photo_index += 1;
+    }
+
+    pub fn fillDir(self: *Self) !void {
+        for(0..self.max_dir_len) |_| {
+            self.getNextPhoto() catch |err| switch(err) {
+                error.IndexOverflow => {
+                    self.photo_index = 0;
+                    break;
+                },
+                else => return err,
+            };
+        }
     }
 
     fn getUrl(self: *Self, path: []const u8, query: ?[]const u8) ![]const u8{

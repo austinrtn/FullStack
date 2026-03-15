@@ -340,6 +340,7 @@ func getNextPhoto(appState *AppState, res http.ResponseWriter, req *http.Request
 	} else if fileIdx >= len(dir) {
 		overflow = true
 		sendErrorHeader(res, IndexOverflow)
+		http.Error(res, "Index is out of bounds", http.StatusBadRequest)
 	}
 
 	var file os.DirEntry

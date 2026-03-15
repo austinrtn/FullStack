@@ -8,7 +8,9 @@ const PhotoCtx = struct {
     photo_dir_name: []const u8 = "photos",
     photo_dir: std.fs.Dir = undefined, 
     dir_index: usize = 0,
-    texture: ?raylib.Texture2D = null, 
+    pending_image_path: ?[:0]const u8 = null,
+    pending_image: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    texture: ?raylib.Texture2D = null,
 };
 
 pub const PhotoViewer = struct {
@@ -27,9 +29,12 @@ pub const PhotoViewer = struct {
     screen_width: i32 = 800,
     screen_height: i32 = 600,
     fps: i32 = 60,
+    dir_index: usize = 0,
+    photo_durration: u64 = 1,
+    timer: ?std.time.Timer = null,
 
     impl: PhotoCtx = .{},
-    do: bool = false,
+    cycling: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
 
     pub fn init(config: Config) !Self {
         var self = Self{
@@ -40,7 +45,7 @@ pub const PhotoViewer = struct {
             .fps = config.fps,
         };
 
-        self.impl.photo_dir = try std.fs.cwd().openDir(self.impl.photo_dir_name, .{});
+        self.impl.photo_dir = try std.fs.cwd().openDir(self.impl.photo_dir_name, .{.iterate = true});
         return self;
     }
 
@@ -60,35 +65,53 @@ pub const PhotoViewer = struct {
     }
 
     pub fn loop(self: *Self) !void {
-        self.do = true;
         var thread = try std.Thread.spawn(
             .{.allocator = self.allocator}, 
-            updateFiles,
+            cyclePhotos,
             .{self}
         );
 
         while(!raylib.windowShouldClose()) {
-            self.render();
+            try self.render();
         }
 
-        self.do = false;
+        self.cycling.store(false, .release);
         thread.join();
     } 
 
-    pub fn updateFiles(self: *Self) !void {
-        while(self.updating_files) {
+    pub fn cyclePhotos(self: *Self) !void {
+        var dir_iter = self.impl.photo_dir.iterate();
+        while(self.cycling.load(.acquire)) {
+            while(try dir_iter.next()) |entry| {
+                if(entry.kind != .file) continue;
 
+                self.impl.mutex.lock();
+                var buf: [256]u8 = undefined;                
+                self.impl.pending_image_path =  try std.fmt.bufPrintZ(&buf, "{s}/{s}", .{self.impl.photo_dir_name, entry.name});
+                self.impl.mutex.unlock();
+                self.impl.pending_image.store(true, .release);
+
+                std.Thread.sleep(self.photo_durration * std.time.ns_per_s);
+            }
+            dir_iter.reset();
         }
     }
 
-    pub fn render(self: *Self) void {
+    pub fn render(self: *Self) !void {
         raylib.beginDrawing(); 
         defer raylib.endDrawing();
-
         raylib.clearBackground(.ray_white);
 
+        if(self.impl.pending_image.load(.acquire)) {
+            if(self.impl.texture) |texture| raylib.unloadTexture(texture);
+            self.impl.mutex.lock();
+            self.impl.texture = try raylib.loadTexture(self.impl.pending_image_path.?);
+            self.impl.mutex.unlock();
+            self.impl.pending_image.store(false, .release);
+        }
+        
         if(self.impl.texture != null) {
-            self.drawImg();
+            try self.drawImg();
         }
         else {
             self.drawNoImgText();
@@ -96,13 +119,9 @@ pub const PhotoViewer = struct {
 
     }
 
-    fn loadNextImg() void {
-
-    }
-
-    fn drawImg(self: *Self) void {
+    fn drawImg(self: *Self) !void {
         const texture = self.impl.texture orelse unreachable;
-        const texture_dims = self.getTextureSize() catch unreachable;
+        const texture_dims = try self.getTextureSize();
 
         raylib.drawTexturePro(
             texture, 

@@ -22,14 +22,6 @@ pub const Context = struct {
         self.impl.arena.deinit();
     }
 
-    pub fn copyVal(self: *Self, comptime field_name: []const u8, val: anytype) !void {
-        const field_ref = &@field(self, field_name);
-        const FieldType = @TypeOf(field_ref.*);
-
-        if(FieldType != @TypeOf(val)) { @compileError("Value of field does not match value of parameter\n"); }
-        field_ref.* = try self.impl.arena.allocator().dupe(std.meta.Child(FieldType), val);
-    }
-
     pub fn isConnected(self: *Self) bool {
         return self.impl.connection_established.load(.acquire);
     }

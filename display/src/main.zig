@@ -28,7 +28,8 @@ pub fn main() !void {
 
     try listener.startListening(url ++ "events?category=DISPLAY");
     defer listener.stopListening();
-
+    
+    std.Thread.sleep(1.5 * std.time.ns_per_s);
     var photo_manager = PhotoManager.init(.{
         .allocator = allocator,
         .url = url,
@@ -46,6 +47,7 @@ pub fn main() !void {
     photo_viewer.initWindow();
     try photo_viewer.loop();
 
+    if(true) return;
     //var attempting = false;
     // while(true) {
     //     if(!attempting) std.debug.print("Downloading Photo {}/7\n", .{photo_manager.photo_index});

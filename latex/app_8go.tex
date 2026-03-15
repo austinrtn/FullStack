@@ -1,0 +1,190 @@
+\doxysection{app.\+go File Reference}
+\hypertarget{app_8go}{}\label{app_8go}\index{app.go@{app.go}}
+{\ttfamily import const;}\newline
+{\ttfamily import PORT;}\newline
+{\ttfamily import var;}\newline
+{\ttfamily import last\+Img\+Name;}\newline
+{\ttfamily import string;}\newline
+{\ttfamily import type;}\newline
+{\ttfamily import Client\+Category;}\newline
+{\ttfamily import UI;}\newline
+{\ttfamily import Display;}\newline
+{\ttfamily import Broadcast\+Msg;}\newline
+{\ttfamily import Refresh;}\newline
+{\ttfamily import Connection\+Established;}\newline
+{\ttfamily import Photos\+Available;}\newline
+{\ttfamily import No\+Photos\+Available;}\newline
+{\ttfamily import Error\+Header\+Msg;}\newline
+{\ttfamily import Invalid\+Index;}\newline
+{\ttfamily import Index\+Overflow;}\newline
+{\ttfamily import Unable\+To\+Read\+File;}\newline
+{\ttfamily import func;}\newline
+{\ttfamily import send\+Error\+Header;}\newline
+{\ttfamily import res;}\newline
+{\ttfamily import http.\+Response\+Writer;}\newline
+{\ttfamily import msg;}\newline
+{\ttfamily import header\+Name;}\newline
+{\ttfamily import res.\+Header;}\newline
+{\ttfamily import Set;}\newline
+{\ttfamily import Client;}\newline
+{\ttfamily import struct;}\newline
+{\ttfamily import Category;}\newline
+{\ttfamily import Img\+Data;}\newline
+{\ttfamily import File\+Name;}\newline
+{\ttfamily import json;}\newline
+{\ttfamily import File\+Bytes;}\newline
+{\ttfamily import byte;}\newline
+{\ttfamily import Img\+Path;}\newline
+{\ttfamily import Path;}\newline
+{\ttfamily import App\+State;}\newline
+{\ttfamily import Photo\+Dir\+Name;}\newline
+{\ttfamily import Clients;}\newline
+{\ttfamily import map;}\newline
+{\ttfamily import chan;}\newline
+{\ttfamily import Mu;}\newline
+{\ttfamily import sync.\+Mutex;}\newline
+{\ttfamily import bool;}\newline
+{\ttfamily import Last\+Recorded\+Len;}\newline
+{\ttfamily import int;}\newline
+{\ttfamily import update\+App\+State;}\newline
+{\ttfamily import app\+State;}\newline
+{\ttfamily import dir;}\newline
+{\ttfamily import os.\+Dir\+Entry;}\newline
+{\ttfamily import app\+State.\+Mu.\+Lock;}\newline
+{\ttfamily import defer;}\newline
+{\ttfamily import app\+State.\+Mu.\+Unlock;}\newline
+{\ttfamily import current\+Len;}\newline
+{\ttfamily import len;}\newline
+{\ttfamily import if;}\newline
+{\ttfamily import app\+State.\+Photos\+Available;}\newline
+{\ttfamily import broadcast\+Locked;}\newline
+{\ttfamily import true;}\newline
+{\ttfamily import else;}\newline
+{\ttfamily import app\+State.\+Last\+Recorded\+Len;}\newline
+{\ttfamily import false;}\newline
+{\ttfamily import open\+Dir;}\newline
+{\ttfamily import dir\+Name;}\newline
+{\ttfamily import files;}\newline
+{\ttfamily import ok;}\newline
+{\ttfamily import err;}\newline
+{\ttfamily import os.\+Read\+Dir;}\newline
+{\ttfamily import nil;}\newline
+{\ttfamily import http.\+Error;}\newline
+{\ttfamily import http.\+Status\+Internal\+Server\+Error;}\newline
+{\ttfamily import return;}\newline
+{\ttfamily import main;}\newline
+{\ttfamily import error;}\newline
+{\ttfamily import fs;}\newline
+{\ttfamily import http.\+File\+Server;}\newline
+{\ttfamily import http.\+Dir;}\newline
+{\ttfamily import http.\+Handle;}\newline
+{\ttfamily import photos;}\newline
+{\ttfamily import http.\+Strip\+Prefix;}\newline
+{\ttfamily import os.\+Mkdir\+All;}\newline
+{\ttfamily import app\+State.\+Photo\+Dir\+Name;}\newline
+{\ttfamily import log.\+Fatal;}\newline
+{\ttfamily import log.\+Fatalf;}\newline
+{\ttfamily import "{}encoding/\+json"{};}\newline
+{\ttfamily import "{}errors"{};}\newline
+{\ttfamily import "{}fmt"{};}\newline
+{\ttfamily import "{}log"{};}\newline
+{\ttfamily import "{}math/\+rand/\+v2"{};}\newline
+{\ttfamily import "{}mime"{};}\newline
+{\ttfamily import "{}net/\+http"{};}\newline
+{\ttfamily import "{}os"{};}\newline
+{\ttfamily import "{}path/\+filepath"{};}\newline
+{\ttfamily import "{}strconv"{};}\newline
+{\ttfamily import "{}strings"{};}\newline
+{\ttfamily import "{}sync"{};}\newline
+{\ttfamily import "{}:\+3000"{};}\newline
+{\ttfamily import "{}DISPLAY"{};}\newline
+{\ttfamily import "{}refresh"{};}\newline
+{\ttfamily import "{}connection\+\_\+established"{};}\newline
+{\ttfamily import "{}photos\+\_\+available"{};}\newline
+{\ttfamily import "{}no\+\_\+photos\+\_\+available"{};}\newline
+{\ttfamily import "{}invalid\+\_\+index"{};}\newline
+{\ttfamily import "{}index\+\_\+overflow"{};}\newline
+{\ttfamily import "{}unable\+\_\+to\+\_\+read\+\_\+file"{};}\newline
+{\ttfamily import "{}X-\/\+Error-\/\+Code"{};}\newline
+{\ttfamily import "{}name"{};}\newline
+{\ttfamily import "{}file"{};}\newline
+{\ttfamily import "{}path"{};}\newline
+{\ttfamily import "{}Could not read photos director"{};}\newline
+{\ttfamily import "{}http"{};}\newline
+{\ttfamily import "{}/\+"{};}\newline
+{\ttfamily import "{}/\+photos/\+"{};}\newline
+{\ttfamily import "{}/\+photos"{};}\newline
+{\ttfamily import "{}Error creating photos directory on server"{};}\newline
+{\ttfamily import "{}Error:\+ \%v"{};}\newline
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+package \doxymbox{\hyperlink{main_8zig_a2e1d02a84f0ef07ee9e3a594d4736720}{main}} \doxymbox{\hyperlink{app_8go_a9e00931b23c5d78a3aead64ea3d6d9f8}{update\+App\+State}} (app\+State, dir) \doxymbox{\hyperlink{app_8go_af77fba355ef3bafd819df824aa25975f}{http.\+Handle\+Func}}("{}/\+events"{}
+\item 
+package \doxymbox{\hyperlink{main_8zig_a2e1d02a84f0ef07ee9e3a594d4736720}{main}} \doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}} (res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request)
+\item 
+http \doxymbox{\hyperlink{app_8go_af77fba355ef3bafd819df824aa25975f}{Handle\+Func}} ("{}/\+get\+Photos"{}, \doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}}(res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request) \{ get\+Photos(app\+State, res, req) \}) http.\+Handle\+Func("{}/\+save\+Photo"{}
+\item 
+http \doxymbox{\hyperlink{app_8go_a76c5b18b5494e477e45ad69607ab36b2}{Handle\+Func}} ("{}/\+delete\+Photo"{}, \doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}}(res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request) \{ \doxymbox{\hyperlink{src_8js_aba3f66349c7944a80ceb5a924da218f0}{delete\+Photo}}(app\+State, res, req) \}) http.\+Handle\+Func("{}/\+get\+Next\+Photo"{}
+\item 
+http \doxymbox{\hyperlink{app_8go_ac4f84754a916ab32dd10978ed90edc10}{Handle\+Func}} ("{}/\+get\+Random\+Photo"{}, \doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}}(res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request) \{ \doxymbox{\hyperlink{src_8js_ad4a69a904edeb36cc8bb458555f7af6b}{get\+Random\+Photo}}(app\+State, res, req) \}) http.\+Handle\+Func("{}/\+test"{}
+\item 
+log \doxymbox{\hyperlink{app_8go_ad493fdeea83f2b4cc3690d3b10adf8f2}{Printf}} ("{}Listening to \%s\textbackslash{}n\textbackslash{}n"{}, PORT) err
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Variables}
+\begin{DoxyCompactItemize}
+\item 
+http \doxymbox{\hyperlink{app_8go_a34eb3cfd989d70f796087866064c2020}{test}}
+\end{DoxyCompactItemize}
+
+
+\label{doc-func-members}
+\Hypertarget{app_8go_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}\index{app.go@{app.go}!func@{func}}
+\index{func@{func}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{func()}{func()}}
+{\footnotesize\ttfamily \label{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc} 
+http func (\begin{DoxyParamCaption}\item[{res http.}]{Response\+Writer}{, }\item[{req \texorpdfstring{$\ast$}{*}http.}]{Request}{}\end{DoxyParamCaption})}
+
+\Hypertarget{app_8go_a76c5b18b5494e477e45ad69607ab36b2}\index{app.go@{app.go}!HandleFunc@{HandleFunc}}
+\index{HandleFunc@{HandleFunc}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{HandleFunc()}{HandleFunc()}\hspace{0.1cm}{\footnotesize\ttfamily [1/3]}}
+{\footnotesize\ttfamily \label{app_8go_a76c5b18b5494e477e45ad69607ab36b2} 
+http Handle\+Func (\begin{DoxyParamCaption}\item[{"{}/\+delete\+Photo"{}}]{}{, }\item[{\doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}}(res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request) \{ \doxymbox{\hyperlink{src_8js_aba3f66349c7944a80ceb5a924da218f0}{delete\+Photo}}(app\+State, res, req) \}}]{}{}\end{DoxyParamCaption})}
+
+\Hypertarget{app_8go_af77fba355ef3bafd819df824aa25975f}\index{app.go@{app.go}!HandleFunc@{HandleFunc}}
+\index{HandleFunc@{HandleFunc}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{HandleFunc()}{HandleFunc()}\hspace{0.1cm}{\footnotesize\ttfamily [2/3]}}
+{\footnotesize\ttfamily \label{app_8go_af77fba355ef3bafd819df824aa25975f} 
+http Handle\+Func (\begin{DoxyParamCaption}\item[{"{}/\+get\+Photos"{}}]{}{, }\item[{\doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}}(res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request) \{ get\+Photos(app\+State, res, req) \}}]{}{}\end{DoxyParamCaption})}
+
+\Hypertarget{app_8go_ac4f84754a916ab32dd10978ed90edc10}\index{app.go@{app.go}!HandleFunc@{HandleFunc}}
+\index{HandleFunc@{HandleFunc}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{HandleFunc()}{HandleFunc()}\hspace{0.1cm}{\footnotesize\ttfamily [3/3]}}
+{\footnotesize\ttfamily \label{app_8go_ac4f84754a916ab32dd10978ed90edc10} 
+http Handle\+Func (\begin{DoxyParamCaption}\item[{"{}/\+get\+Random\+Photo"{}}]{}{, }\item[{\doxymbox{\hyperlink{app_8go_ac163d0d02c5b72942e472c1dbe9d9bdc}{func}}(res http.\+Response\+Writer, req \texorpdfstring{$\ast$}{*}http.\+Request) \{ \doxymbox{\hyperlink{src_8js_ad4a69a904edeb36cc8bb458555f7af6b}{get\+Random\+Photo}}(app\+State, res, req) \}}]{}{}\end{DoxyParamCaption})}
+
+\Hypertarget{app_8go_ad493fdeea83f2b4cc3690d3b10adf8f2}\index{app.go@{app.go}!Printf@{Printf}}
+\index{Printf@{Printf}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{Printf()}{Printf()}}
+{\footnotesize\ttfamily \label{app_8go_ad493fdeea83f2b4cc3690d3b10adf8f2} 
+log Printf (\begin{DoxyParamCaption}\item[{"{}Listening to \%s\textbackslash{}n\textbackslash{}n"{}}]{}{, }\item[{PORT}]{}{}\end{DoxyParamCaption})}
+
+\Hypertarget{app_8go_a9e00931b23c5d78a3aead64ea3d6d9f8}\index{app.go@{app.go}!updateAppState@{updateAppState}}
+\index{updateAppState@{updateAppState}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{updateAppState()}{updateAppState()}}
+{\footnotesize\ttfamily \label{app_8go_a9e00931b23c5d78a3aead64ea3d6d9f8} 
+package \doxymbox{\hyperlink{main_8zig_a2e1d02a84f0ef07ee9e3a594d4736720}{main}} update\+App\+State (\begin{DoxyParamCaption}\item[{app\+State}]{}{, }\item[{dir}]{}{}\end{DoxyParamCaption})}
+
+
+
+\label{doc-var-members}
+\Hypertarget{app_8go_doc-var-members}
+\doxysubsection{Variable Documentation}
+\Hypertarget{app_8go_a34eb3cfd989d70f796087866064c2020}\index{app.go@{app.go}!test@{test}}
+\index{test@{test}!app.go@{app.go}}
+\doxysubsubsection{\texorpdfstring{test}{test}}
+{\footnotesize\ttfamily \label{app_8go_a34eb3cfd989d70f796087866064c2020} 
+http test}
+

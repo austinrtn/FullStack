@@ -1,0 +1,4 @@
+var searchData=
+[
+  ['updateappstate_0',['updateAppState',['../app_8go.html#a9e00931b23c5d78a3aead64ea3d6d9f8',1,'app.go']]]
+];

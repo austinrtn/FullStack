@@ -1,0 +1,50 @@
+\doxysection{display/\+src/\+\+Pixel.zig File Reference}
+\hypertarget{Pixel_8zig}{}\label{Pixel_8zig}\index{display/src/Pixel.zig@{display/src/Pixel.zig}}
+\doxysubsubsection*{Variables}
+\begin{DoxyCompactItemize}
+\item 
+const \doxymbox{\hyperlink{Pixel_8zig_a429d537b6454844202036fbee7e62243}{std}} = @import("{}std"{})
+\item 
+const \doxymbox{\hyperlink{Pixel_8zig_acaac336265ff6d1b06d92ec2af99da27}{raylib}} = @import("{}raylib"{})
+\item 
+pub const \doxymbox{\hyperlink{Pixel_8zig_af1aac77e01c4f81563563f42bf76ec5e}{Pixel}}
+\end{DoxyCompactItemize}
+
+
+\label{doc-var-members}
+\Hypertarget{Pixel_8zig_doc-var-members}
+\doxysubsection{Variable Documentation}
+\Hypertarget{Pixel_8zig_af1aac77e01c4f81563563f42bf76ec5e}\index{Pixel.zig@{Pixel.zig}!Pixel@{Pixel}}
+\index{Pixel@{Pixel}!Pixel.zig@{Pixel.zig}}
+\doxysubsubsection{\texorpdfstring{Pixel}{Pixel}}
+{\footnotesize\ttfamily \label{Pixel_8zig_af1aac77e01c4f81563563f42bf76ec5e} 
+pub const Pixel}
+
+{\bfseries Initial value:\+}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ =\ \textcolor{keyword}{struct\ }\{}
+\DoxyCodeLine{\ \ \ \ color:\ \doxymbox{\hyperlink{main_8zig_acaac336265ff6d1b06d92ec2af99da27}{raylib}}.color,\ }
+\DoxyCodeLine{\ \ \ \ pos:\ \doxymbox{\hyperlink{main_8zig_acaac336265ff6d1b06d92ec2af99da27}{raylib}}.Vector2,\ }
+\DoxyCodeLine{\ \ \ \ vel:\ \doxymbox{\hyperlink{main_8zig_acaac336265ff6d1b06d92ec2af99da27}{raylib}}.Vector2\ =\ .\{.x\ =\ 0,\ .y\ =\ 0\},}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ pub\ fn\ init(color:\ \doxymbox{\hyperlink{main_8zig_acaac336265ff6d1b06d92ec2af99da27}{raylib}}.Color,\ pos:\ \doxymbox{\hyperlink{main_8zig_acaac336265ff6d1b06d92ec2af99da27}{raylib}}.Vector2)\ @This()\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ .\{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ .color\ =\ color,}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ .pos\ =\ pos,}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \};\ \ \ \ \ \ }
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+\Hypertarget{Pixel_8zig_acaac336265ff6d1b06d92ec2af99da27}\index{Pixel.zig@{Pixel.zig}!raylib@{raylib}}
+\index{raylib@{raylib}!Pixel.zig@{Pixel.zig}}
+\doxysubsubsection{\texorpdfstring{raylib}{raylib}}
+{\footnotesize\ttfamily \label{Pixel_8zig_acaac336265ff6d1b06d92ec2af99da27} 
+const raylib = @import("{}raylib"{})}
+
+\Hypertarget{Pixel_8zig_a429d537b6454844202036fbee7e62243}\index{Pixel.zig@{Pixel.zig}!std@{std}}
+\index{std@{std}!Pixel.zig@{Pixel.zig}}
+\doxysubsubsection{\texorpdfstring{std}{std}}
+{\footnotesize\ttfamily \label{Pixel_8zig_a429d537b6454844202036fbee7e62243} 
+const std = @import("{}std"{})}
+

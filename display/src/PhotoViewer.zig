@@ -7,7 +7,6 @@ const PhotoCtx = struct {
 
     photo_dir_name: []const u8 = "photos",
     photo_dir: std.fs.Dir = undefined, 
-    dir_index: usize = 0,
     pending_image_path: ?[:0]const u8 = null,
     pending_image: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     texture: ?raylib.Texture2D = null,
@@ -15,26 +14,27 @@ const PhotoCtx = struct {
 
 pub const PhotoViewer = struct {
     const Self = @This();
-    const Config = struct {
-        allocator: std.mem.Allocator,
-        fullscreen: bool = false,
 
+    allocator: std.mem.Allocator,
+
+    settings: struct {
+        fullscreen: bool = false,
         screen_width: i32 = 800,
         screen_height: i32 = 600,
         fps: i32 = 60,
-    };
+        photo_durration_s: u64 = 1,
+    },
 
-    allocator: std.mem.Allocator,
-    fullscreen: bool = false,
-    screen_width: i32 = 800,
-    screen_height: i32 = 600,
-    fps: i32 = 60,
-    dir_index: usize = 0,
-    photo_durration: u64 = 1,
-    timer: ?std.time.Timer = null,
+    photo_ctx: struct {
+        cycling: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
 
-    impl: PhotoCtx = .{},
-    cycling: std.atomic.Value(bool) = std.atomic.Value(bool).init(true),
+        fn setCycling(self: *@This(), val: bool) void {
+            self.cycling.store(val, .release);
+        }
+        fn isCycling(self: *@This()) bool {
+            return self.cycling.load(.acquire);
+        }
+    },
 
     pub fn init(config: Config) !Self {
         var self = Self{
@@ -169,19 +169,15 @@ pub const PhotoViewer = struct {
             const texture_width: f32 = @floatFromInt(texture.width);
             const texture_height: f32 = @floatFromInt(texture.height);
 
-            const min_size: f32 = 250.0;
-            const max_size: f32 = 350.0;
             const scale = blk: {
-                if((texture_width <= max_size and texture_height <= max_size) and
-                    (texture_width >= min_size and texture_height >= min_size)) {
+                if((texture_width <= screen_width) and (texture_height <= screen_height)) {
                     break :blk 1;
                 }
 
-                const w_scale = max_size / texture_width;
-                const h_scale = max_size / texture_height;
+                const w_scale = screen_width / texture_width;
+                const h_scale = screen_height / texture_height;
 
-                if(w_scale < h_scale) { break :blk w_scale; }
-                else { break :blk h_scale; }
+                break :blk @min(w_scale, h_scale);
             };
 
             const fmt_width: f32 = texture_width * scale;
@@ -195,4 +191,13 @@ pub const PhotoViewer = struct {
             };
             return .{.pos = pos, .width = fmt_width, .height = fmt_height};
         }
+};
+
+const Config = struct {
+    allocator: std.mem.Allocator,
+    fullscreen: bool = false,
+
+    screen_width: i32 = 800,
+    screen_height: i32 = 600,
+    fps: i32 = 60,
 };

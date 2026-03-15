@@ -4,8 +4,8 @@ const Client = @import("ZigClient");
 const ZigClient = Client.ZigClient(Context);
 
 const Context = @import("./Context.zig").Context;
-const PhotoManager = @import("./PhotoManager.zig").PhotoManager;
-const PhotoViewer = @import("./PhotoViewer.zig").PhotoViewer;
+pub const PhotoManager = @import("./PhotoManager.zig").PhotoManager;
+pub const PhotoViewer = @import("./PhotoViewer.zig").PhotoViewer;
 
 const url = "http://localhost:3000/";
 const FULL_SCREEN = false;

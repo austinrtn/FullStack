@@ -1,15 +1,17 @@
 /// Sends selected picture to backend
+
 function submitPhoto() {
 	// Check for / get user selected file
 	const file = document.getElementById("file_btn").files[0];
 	if (file == null || file == undefined) return;
 
 	const file_name = file.name;
-	const file_ext = file_name.split(".").pop();
+	const file_ext = file_name.split(".").pop().toLowerCase();
 
+	console.log(file_ext)
 	// Make sure correct file type (image)
 	if (file_ext != "jpeg" && file_ext != "png" && file_ext != "jpg") {
-		alert("Invalid file type.  Must be .png or .jpeg");
+		alert("Invalid file type.  Must be .png or .jpeg/jpg");
 		return;
 	}
 

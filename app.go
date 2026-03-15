@@ -253,7 +253,11 @@ func getPhotos(appState *AppState, res http.ResponseWriter, _ *http.Request) {
 
 	// For each file, create file path, convert into ImgPath struct and append to imgPaths
 	for _, file := range dir {
-		if logError(nil, checkImgValid(file.Name(), file.IsDir())) { return }
+		err := checkImgValid(file.Name(), file.IsDir())
+		if err != nil {
+			log.Fatal("File type is not valid")
+			return
+		}
 
 		// Create photo filepath 
 		filePath := filepath.Join("photos", file.Name())
@@ -426,8 +430,8 @@ var errInvalidFile = errors.New("invalid image type")
 
 func checkImgValid(fileName string, isDir bool) (error) {
 	if isDir { return errInvalidFile}
-	fileExt := filepath.Ext(fileName)
-
+	fileExt := strings.ToLower(filepath.Ext(fileName))
+	
 	if fileExt != ".png" && fileExt != ".jpg" && fileExt != ".jpeg" { return errInvalidFile}
 	return nil
 }

@@ -25,6 +25,8 @@ pub fn build(b: *std.Build) void {
 
     });
 
+    exe.link_gc_sections = true;
+
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run app");
